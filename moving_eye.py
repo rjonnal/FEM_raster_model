@@ -107,7 +107,7 @@ class Gaze:
     d_theta = np.pi/100.0
     step_size = 0.1
     
-    def __init__(self,x0=0.0,y0=0.0,potential_strength=0.0):
+    def __init__(self,x0=0.0,y0=0.0,potential_strength=0.0,fixation_quality=1.0):
         self.x = x0
         self.y = y0
         self.x0 = x0
@@ -116,7 +116,7 @@ class Gaze:
         self.x_path = []
         self.y_path = []
         self.landscape = DepressionSet()
-        self.landscape.add(ConstantPeak(x0,y0))
+        self.landscape.add(ConstantPeak(x0,y0,v_factor=1.0*fixation_quality,h_factor=1.0*fixation_quality))
         self.landscape.add(Depression(x0,y0))
 
     def plot_surface(self,ax,xx,yy):
@@ -211,44 +211,11 @@ if __name__=='__main__':
     fig = plt.figure()
     #ax = fig.gca(projection='3d')
     
-    g = Gaze(potential_strength=1.0)
+    g = Gaze(potential_strength=1.0,fixation_quality=0.5)
     while True:
         g.step()
         #g.plot_surface(ax,XX,YY)
         if g.landscape.age%1==0:
             g.plot()
             plt.pause(.00000001)
-        
-    plt.show()
-    sys.exit()
-    
-    x,y = g.get_ring(1.0)
-    plt.plot(x,y,'ks')
-    plt.show()
-    sys.exit()
-    ds = DepressionSet()
-    ds.add(Depression(0.0,0.0))
-
-    while True:
-        if np.random.rand()>.9:
-            x = (np.random.rand()-.5)*2.0
-            y = (np.random.rand()-.5)*2.0
-            ds.add(Depression(x,y))
-            
-        ds.step()
-        ds.plot(ax,XX,YY)
-        #ds.evaluate(XX,YY)
-        
-        
-        plt.pause(.001)
-    
-    sys.exit()
-    
-
-    mo = MovingObject('./images/grass.npy')
-    x = np.arange(0,300e-6,1e-6)
-    y = 1.0/(1+np.exp(-(x-mo.drift_amplitude)*2e4))
-
-    plt.plot(x,y)
-    plt.show()
         
