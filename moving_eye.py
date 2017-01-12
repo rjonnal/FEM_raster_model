@@ -107,7 +107,7 @@ class Gaze:
     d_theta = np.pi/100.0
     step_size = 0.1
     
-    def __init__(self,x0=0.0,y0=0.0,potential_strength=0.0,fixation_quality=1.0):
+    def __init__(self,x0=0.0,y0=0.0,potential_strength=0.0,fixation_quality=1.0,image=None):
         self.x = x0
         self.y = y0
         self.x0 = x0
@@ -118,20 +118,30 @@ class Gaze:
         self.landscape = DepressionSet()
         self.landscape.add(ConstantPeak(x0,y0,v_factor=1.0*fixation_quality,h_factor=1.0*fixation_quality))
         self.landscape.add(Depression(x0,y0))
-
+        if image is None:
+            self.image = np.zeros((100,100))
+        else:
+            self.image = image
+        
     def plot_surface(self,ax,xx,yy):
         self.landscape.plot(ax,xx,yy)
 
     def plot(self,xlims=(-2,2),ylims=(-2,2),N=128):
-        plt.subplot(1,2,1)
+        plt.subplot(1,3,1)
         plt.cla()
         xx,yy = np.meshgrid(np.linspace(xlims[0],xlims[1],N),np.linspace(ylims[0],ylims[1],N))
         self.landscape.plot2d(xx,yy)
-        plt.subplot(1,2,2)
+        plt.subplot(1,3,2)
         plt.cla()
         plt.plot(self.x_path,self.y_path,'k.')
         plt.xlim(xlims)
         plt.ylim(ylims)
+        plt.subplot(1,3,3)
+        plt.cla()
+        plt.imshow(self.image,cmap='gray',interpolation='none')
+        sy,sx = self.image.shape
+        plt.xlim((sx//2+50*self.x-400,sx//2+50*self.x+400))
+        plt.ylim((sy//2+50*self.y-400,sy//2+50*self.y+400))
         
     def get_ring(self,r):
         thetas = np.arange(0,np.pi*2,self.d_theta)
@@ -207,11 +217,13 @@ class Gaze:
 if __name__=='__main__':
 
 
+    im = np.load('./images/horseback.npy')
+    
     XX,YY = np.meshgrid(np.arange(-3,3,.01),np.arange(-3,3,.01))
     fig = plt.figure()
     #ax = fig.gca(projection='3d')
     
-    g = Gaze(potential_strength=1.0,fixation_quality=0.5)
+    g = Gaze(potential_strength=1.0,fixation_quality=1,image=im)
     while True:
         g.step()
         #g.plot_surface(ax,XX,YY)
