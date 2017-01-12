@@ -16,6 +16,7 @@ class Eye:
 class Depression:
     A0 = 1.0 # initial amplitude
     relaxation_rate = 1.0e-2
+    steepness = 10
     
     def __init__(self,x,y):
         self.age = 0.0
@@ -26,24 +27,45 @@ class Depression:
     def step(self):
         self.age = self.age + 1
         self.A = self.A * np.exp(-self.age*self.relaxation_rate)
-        print self.A
         
     def evaluate(self,xx0,yy0):
         xx = xx0.copy()-self.x
         yy = yy0.copy()-self.y
-        return -1.0/np.exp(np.sqrt(xx**2+yy**2)*10)*self.A
+        return -1.0/np.exp(np.sqrt(xx**2+yy**2)*self.steepness)*self.A
 
-    def plot(self,ax,xx,yy):
+    def plot3d(self,ax,xx,yy):
         surf = self.evaluate(xx,yy)
         ax.cla()
         ax.plot_surface(xx, yy, surf, rstride=10, cstride=10, cmap=cm.coolwarm,
                                linewidth=0, antialiased=False)
         ax.set_zlim((-1,0))
 
+    def plot2d(self,xx,yy):
+        plt.cla()
+        surf = self.evaluate(xx,yy)
+        plt.imshow(surf)
+
+class ConstantPeak(Depression):
+
+    def __init__(self,x,y,h_factor=1.0,v_factor=1.0):
+        Depression.__init__(self,x,y)
+        self.h_factor = h_factor
+        self.v_factor = v_factor
+
+    def evaluate(self,xx0,yy0):
+        xx = xx0.copy()-self.x
+        yy = yy0.copy()-self.y
+        surf = self.A0-((xx*self.h_factor)**2+(yy*self.v_factor)**2)
+        return surf
+        
+    def step(self):
+        self.age = self.age + 1
+        self.A = self.A0
+
+
 class DepressionSet:
 
-    ageout = 10
-    
+    Aepsilon = .01
     def __init__(self):
         self.depressions = []
         self.age = 0
@@ -55,23 +77,31 @@ class DepressionSet:
         self.age = self.age + 1
         for d in self.depressions:
             d.step()
-            if d.age>self.ageout:
+            print '.',
+            # remove depressions with negligible amplitudes
+            if d.A<self.Aepsilon:
                 self.depressions.remove(d)
-            
+        print
+        
     def evaluate(self,xx,yy):
         depression_sum = np.zeros(xx.shape)
         for d in self.depressions:
             depression_sum = depression_sum + d.evaluate(xx,yy)
         return depression_sum
 
-    def plot(self,ax,xx,yy):
+    def plot3d(self,ax,xx,yy):
         surf = self.evaluate(xx,yy)
         ax.cla()
         ax.plot_surface(xx, yy, surf, rstride=10, cstride=10, cmap=cm.coolwarm,
                                linewidth=0, antialiased=False)
         ax.set_zlim((-1,0))
 
-
+    def plot2d(self,xx,yy):
+        plt.cla()
+        surf = self.evaluate(xx,yy)
+        plt.imshow(surf)
+    
+        
 class Gaze:
 
     d_theta = np.pi/100.0
@@ -86,16 +116,22 @@ class Gaze:
         self.x_path = []
         self.y_path = []
         self.landscape = DepressionSet()
+        self.landscape.add(ConstantPeak(x0,y0))
         self.landscape.add(Depression(x0,y0))
 
     def plot_surface(self,ax,xx,yy):
         self.landscape.plot(ax,xx,yy)
 
-    def plot(self):
+    def plot(self,xlims=(-2,2),ylims=(-2,2),N=128):
+        plt.subplot(1,2,1)
         plt.cla()
-        plt.plot(self.x_path,self.y_path,'ks')
-        plt.xlim((-2,2))
-        plt.ylim((-2,2))
+        xx,yy = np.meshgrid(np.linspace(xlims[0],xlims[1],N),np.linspace(ylims[0],ylims[1],N))
+        self.landscape.plot2d(xx,yy)
+        plt.subplot(1,2,2)
+        plt.cla()
+        plt.plot(self.x_path,self.y_path,'k.')
+        plt.xlim(xlims)
+        plt.ylim(ylims)
         
     def get_ring(self,r):
         thetas = np.arange(0,np.pi*2,self.d_theta)
@@ -119,35 +155,43 @@ class Gaze:
 
         # get the depths along this ring
         depths = self.landscape.evaluate(xx,yy)
-
+        
         # raise the depths to positive values
         depths = depths - np.min(depths)
 
-        # compute the potential term and add it to the depths
-        potential = ((xx-self.x0)**2+(yy-self.y0)**2)
-        potential = potential**10
-        potential = potential/np.max(potential)
-        potential = potential*self.potential_strength
+        mode='stochastic'
 
-        depths = depths + potential
-        
-        # compute a CDF using a power of the resulting positive depths
-        weights = depths**power/np.sum(depths**power)
-        csum = np.cumsum(weights)
-        cdf = csum/np.max(csum)
+        if mode=='stochastic':
+            # compute a CDF using a power of the resulting positive depths
+            # check for corner case where depths are all zero, and assign
+            # a same-size vector of ones, i.e. all directions equally probable
+            if any(depths):
+                weights = depths**power/np.sum(depths**power)
+            else:
+                weights = np.ones(depths.shape)
+            csum = np.cumsum(weights)
+            cdf = csum/np.max(csum)
 
-        
-        # search the weights for a random number
-        test = np.random.rand()
-        lower_bound = 0
-        for idx,p in enumerate(cdf):
-            if test>=lower_bound and test<=p:
-                x = xx[idx]
-                y = yy[idx]
-                winner = idx
-                break
-            lower_bound = p
+            # search the weights for a random number
+            test = np.random.rand()
+            lower_bound = 0
+            for idx,p in enumerate(cdf):
+                if test>=lower_bound and test<=p:
+                    winner = idx
+                    break
+                lower_bound = p
+
+        if mode=='deterministic':
+            weights = depths
+            winners = np.where(depths==np.max(depths))[0]
+            if len(winners)>1:
+                winner = winners[np.random.randint(len(winners))]
+            else:
+                winner = winners[0]
+                               
             
+        x = xx[winner]
+        y = yy[winner]
         #plt.figure()
         #plt.plot(weights)
         #plt.plot(winner,weights[winner],'go')
@@ -163,16 +207,17 @@ class Gaze:
 if __name__=='__main__':
 
 
-    XX,YY = np.meshgrid(np.arange(-1,1,.01),np.arange(-1,1,.01))
+    XX,YY = np.meshgrid(np.arange(-3,3,.01),np.arange(-3,3,.01))
     fig = plt.figure()
     #ax = fig.gca(projection='3d')
     
     g = Gaze(potential_strength=1.0)
     while True:
         g.step()
-        g.plot()
         #g.plot_surface(ax,XX,YY)
-        plt.pause(.1)
+        if g.landscape.age%1==0:
+            g.plot()
+            plt.pause(.00000001)
         
     plt.show()
     sys.exit()
