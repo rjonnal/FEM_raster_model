@@ -45,7 +45,7 @@ class Depression:
         surf = self.evaluate(xx,yy)
         plt.imshow(surf)
 
-class ConstantPeak(Depression):
+class Potential(Depression):
 
     def __init__(self,x,y,h_factor=1.0,v_factor=1.0):
         Depression.__init__(self,x,y)
@@ -116,7 +116,7 @@ class Gaze:
         self.x_path = []
         self.y_path = []
         self.landscape = DepressionSet()
-        self.landscape.add(ConstantPeak(x0,y0,v_factor=1.0*fixation_quality,h_factor=1.0*fixation_quality))
+        self.landscape.add(Potential(x0,y0,v_factor=1.0*fixation_quality,h_factor=1.0*fixation_quality))
         self.landscape.add(Depression(x0,y0))
         if image is None:
             self.image = np.zeros((100,100))
@@ -217,17 +217,17 @@ class Gaze:
 if __name__=='__main__':
 
 
-    im = np.load('./images/horseback.npy')
+    im = np.load('./images/rocks.npy')
     
     XX,YY = np.meshgrid(np.arange(-3,3,.01),np.arange(-3,3,.01))
     fig = plt.figure()
     #ax = fig.gca(projection='3d')
     
-    g = Gaze(potential_strength=1.0,fixation_quality=1,image=im)
+    g = Gaze(potential_strength=1.0,fixation_quality=3,image=im)
     while True:
         g.step()
         #g.plot_surface(ax,XX,YY)
-        if g.landscape.age%1==0:
+        if g.landscape.age%10==0:
             g.plot()
             plt.pause(.00000001)
         
