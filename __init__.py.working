@@ -5,9 +5,17 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 
-class Feature:
+class Eye:
+
+    def __init__(self,pixel_size=1e-6):
+        self.pixel_size = pixel_size
+        
+    def step(self):
+        pass
+
+class Depression:
     A0 = 1.0 # initial amplitude
-    relaxation_rate = 1.0e-1
+    relaxation_rate = 1.0e-2
     steepness = 10
     
     def __init__(self,x,y):
@@ -18,12 +26,12 @@ class Feature:
         
     def step(self):
         self.age = self.age + 1
-        self.A = (1.0-self.relaxation_rate)*self.A
+        self.A = self.A * np.exp(-self.age*self.relaxation_rate)
         
     def evaluate(self,xx0,yy0):
         xx = xx0.copy()-self.x
         yy = yy0.copy()-self.y
-        return 1.0/np.exp(np.sqrt(xx**2+yy**2)*self.steepness)*self.A
+        return -1.0/np.exp(np.sqrt(xx**2+yy**2)*self.steepness)*self.A
 
     def plot3d(self,ax,xx,yy):
         surf = self.evaluate(xx,yy)
@@ -37,28 +45,25 @@ class Feature:
         surf = self.evaluate(xx,yy)
         plt.imshow(surf)
 
-class ConicalPotential(Feature):
+class Potential(Depression):
 
-    # a conical potential with a peak at the center
-    # unlike footprints, the potential doesn't relax
-    # in its step() function
-    
-    def __init__(self,x,y,L=1.0):
-        Feature.__init__(self,x,y)
-        self.L = L
-        self.A = 1.0
-        
+    def __init__(self,x,y,h_factor=1.0,v_factor=1.0):
+        Depression.__init__(self,x,y)
+        self.h_factor = h_factor
+        self.v_factor = v_factor
+
     def evaluate(self,xx0,yy0):
         xx = xx0.copy()-self.x
         yy = yy0.copy()-self.y
-        surf = self.L*(xx**2+yy**2)
+        surf = self.A0-((xx*self.h_factor)**2+(yy*self.v_factor)**2)
         return surf
         
     def step(self):
         self.age = self.age + 1
-        self.A = 1.0
+        self.A = self.A0
 
-class FeatureSet:
+
+class DepressionSet:
 
     Aepsilon = .01
     def __init__(self):
@@ -72,9 +77,11 @@ class FeatureSet:
         self.age = self.age + 1
         for d in self.depressions:
             d.step()
+            print '.',
             # remove depressions with negligible amplitudes
-            if d.A<self.Aepsilon:#+np.random.randn()*self.Aepsilon*.1:
+            if d.A<self.Aepsilon:
                 self.depressions.remove(d)
+        print
         
     def evaluate(self,xx,yy):
         depression_sum = np.zeros(xx.shape)
@@ -99,19 +106,18 @@ class Gaze:
 
     d_theta = np.pi/100.0
     step_size = 0.1
-    saccade_threshold = 3.0
     
-    def __init__(self,x0=0.0,y0=0.0,drift_potential_slope=1.0,image=None):
+    def __init__(self,x0=0.0,y0=0.0,potential_strength=0.0,fixation_quality=1.0,image=None):
         self.x = x0
         self.y = y0
         self.x0 = x0
         self.y0 = y0
-        self.drift_potential_slope = drift_potential_slope
+        self.potential_strength = potential_strength
         self.x_path = []
         self.y_path = []
-        self.landscape = FeatureSet()
-        self.landscape.add(ConicalPotential(x0,y0,L=drift_potential_slope))
-        self.landscape.add(Feature(x0,y0))
+        self.landscape = DepressionSet()
+        self.landscape.add(Potential(x0,y0,v_factor=1.0*fixation_quality,h_factor=1.0*fixation_quality))
+        self.landscape.add(Depression(x0,y0))
         if image is None:
             self.image = np.zeros((100,100))
         else:
@@ -121,12 +127,10 @@ class Gaze:
         self.landscape.plot(ax,xx,yy)
 
     def plot(self,xlims=(-2,2),ylims=(-2,2),N=128):
-        plt.clf()
         plt.subplot(1,3,1)
         plt.cla()
         xx,yy = np.meshgrid(np.linspace(xlims[0],xlims[1],N),np.linspace(ylims[0],ylims[1],N))
         self.landscape.plot2d(xx,yy)
-        plt.colorbar()
         plt.subplot(1,3,2)
         plt.cla()
         plt.plot(self.x_path,self.y_path,'k.')
@@ -149,7 +153,7 @@ class Gaze:
 
         # increment the landscape
         self.landscape.step()
-
+        
         # implement a self-avoiding random walk
         # self-avoidance is implemented using a continuous
         # version of discrete swamp walk described by
@@ -161,21 +165,16 @@ class Gaze:
 
         # get the depths along this ring
         depths = self.landscape.evaluate(xx,yy)
-
-        # raise the depths to positive values
-        #depths = depths - np.min(depths)
-
-        #plt.plot(depths)
-        #plt.show()
         
+        # raise the depths to positive values
+        depths = depths - np.min(depths)
+
         mode='stochastic'
 
         if mode=='stochastic':
             # compute a CDF using a power of the resulting positive depths
             # check for corner case where depths are all zero, and assign
             # a same-size vector of ones, i.e. all directions equally probable
-            depths = np.max(depths)-depths
-            
             if any(depths):
                 weights = depths**power/np.sum(depths**power)
             else:
@@ -194,7 +193,7 @@ class Gaze:
 
         if mode=='deterministic':
             weights = depths
-            winners = np.where(depths==np.min(depths))[0]
+            winners = np.where(depths==np.max(depths))[0]
             if len(winners)>1:
                 winner = winners[np.random.randint(len(winners))]
             else:
@@ -203,24 +202,6 @@ class Gaze:
             
         x = xx[winner]
         y = yy[winner]
-
-
-        # check for a saccade:
-        activation = self.landscape.evaluate(x,y)
-        if activation>self.saccade_threshold:
-            # evaluate over a fine grid +/- 2 deg, centered about origin
-            xx,yy = np.meshgrid(np.linspace(-2,2,128),np.linspace(-2,2,128))
-            surf = self.landscape.evaluate(xx,yy)
-            #plt.figure()
-            #plt.imshow(surf)
-            #plt.colorbar()
-            #plt.show()
-            #print np.where(surf==np.min(surf))
-            ywin = np.where(surf==np.min(surf))[0][0]
-            xwin = np.where(surf==np.min(surf))[1][0]
-            y = yy[ywin,xwin]
-            x = xx[ywin,xwin]
-        #print 'Moving to %0.2f,%0.2f.'%(x,y)
         #plt.figure()
         #plt.plot(weights)
         #plt.plot(winner,weights[winner],'go')
@@ -231,7 +212,7 @@ class Gaze:
         self.y = y
         self.x_path.append(x)
         self.y_path.append(y)
-        self.landscape.add(Feature(x,y))
+        self.landscape.add(Depression(x,y))
         
 if __name__=='__main__':
 
@@ -242,7 +223,7 @@ if __name__=='__main__':
     fig = plt.figure()
     #ax = fig.gca(projection='3d')
     
-    g = Gaze(drift_potential_slope=1.0,image=im)
+    g = Gaze(potential_strength=1.0,fixation_quality=3,image=im)
     while True:
         g.step()
         #g.plot_surface(ax,XX,YY)
