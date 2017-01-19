@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import os,sys
 from time import time,sleep
-from movie import Movie
+from fig2gif import GIF
 from octopod import H5
 
 ACTIVATION_THRESHOLD = 20.0
@@ -76,8 +76,9 @@ class Retina:
         self.cones.append(Cone(x,y))
 
     def compute_central_field(self,xx,yy):
-        return np.sqrt(xx**2+yy**2)*50
-            
+        return np.sqrt(xx**2+yy**2)*1
+
+
     def compute_total_field(self,xx,yy):
         f = self.compute_central_field(xx,yy)
         for idx,c in enumerate(self.cones):
@@ -100,7 +101,7 @@ class Retina:
         plt.autoscale(False)
         cx = [c.x for c in self.cones]
         cy = [c.y for c in self.cones]
-        plt.plot(cx,cy,'ko')
+        plt.plot(cx,cy,'k.')
 
     def save(self,tag):
         xfn = '%s_x.npy'%tag
@@ -123,13 +124,12 @@ if __name__=='__main__':
     # c.show_field(xx,yy)
     # sys.exit()
 
-    for k in range(1000):
-        print k
+    for k in range(4500):
         r.add()
         #r.show(xx,yy)
         #plt.pause(.00001)
 
-    mov = Movie(autoclean=False)
+    mov = GIF('retina.gif')
     f = plt.figure()
     for k in range(100):
         r.show(xx,yy)
@@ -140,6 +140,6 @@ if __name__=='__main__':
         r.step()
         dt = time()-t0
         print dt
-    mov.makegif()
+    mov.make()
     plt.show()
     r.save('foo')
