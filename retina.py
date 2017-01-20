@@ -9,10 +9,13 @@ ACTIVATION_THRESHOLD = 20.0
 
 class Cone:
 
+    index = 0
     def __init__(self,x,y):
         self.x = x
         self.y = y
         self.activation = np.inf
+        self.index = Cone.index
+        Cone.index = Cone.index + 1
         
     def field(self,xx,yy):
 
@@ -79,15 +82,38 @@ class Retina:
         return np.sqrt(xx**2+yy**2)*1
 
 
-    def compute_total_field(self,xx,yy):
+    def compute_total_field0(self,xx,yy):
         f = self.compute_central_field(xx,yy)
         for idx,c in enumerate(self.cones):
             f = f + c.field(xx,yy)
         return f
 
+    def compute_total_field(self,xx,yy):
+        
+        f = self.compute_central_field(xx,yy)
+
+        cx = np.array([c.x for c in self.cones])
+        cy = np.array([c.y for c in self.cones])
+
+        xstack = np.array([xx]*len(cx))
+        ystack = np.array([yy]*len(cy))
+        if len(xx.shape)==2:
+            xstack = np.transpose(xstack,(1,2,0))
+            ystack = np.transpose(ystack,(1,2,0))
+        else:
+            xstack = xstack.T
+            ystack = ystack.T
+            
+        xstack = xstack - cx
+        ystack = ystack - cy
+        fstack = np.exp(-100*(xstack**2+ystack**2))
+        f = np.sum(fstack,axis=len(fstack.shape)-1)
+        return f
+
     def step(self):
         self.age = self.age + 1
         for c in self.cones:
+            print c.index
             c.step(self)
         print 'Age: %d'%self.age
 
