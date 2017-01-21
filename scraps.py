@@ -1,3 +1,90 @@
+class Retina0:
+
+    def __init__(self,x1=-0.5,x2=0.5,y1=-0.5,y2=0.5,pixel_size=1e-2):
+        self.x1 = min(x1,x2)
+        self.x2 = max(x1,x2)
+        self.y1 = min(y1,y2)
+        self.y2 = max(y1,y2)
+        self.xmid = (self.x1+self.x2)/2.0
+        self.ymid = (self.y1+self.y2)/2.0
+        self.dy = self.y2-self.y1
+        self.dx = self.x2-self.x1
+        
+        self.pixel_size = pixel_size
+
+        # central field
+        self.cones = []
+        self.age = 0
+        self.clims = None
+
+    def add(self):
+        r = min(self.dy,self.dx)/2.0*.95
+        x = np.random.rand()*self.dx+self.x1
+        y = np.random.rand()*self.dy+self.y1
+        print 'Adding cone at %0.1f,%0.1f'%(x,y)
+        self.cones.append(Cone(x,y))
+
+    def compute_central_field(self,xx,yy):
+        return np.sqrt(xx**2+yy**2)*1
+
+
+    def compute_total_field0(self,xx,yy):
+        f = self.compute_central_field(xx,yy)
+        for idx,c in enumerate(self.cones):
+            f = f + c.field(xx,yy)
+        return f
+
+    def compute_total_field(self,xx,yy):
+        
+        f = self.compute_central_field(xx,yy)
+
+        cx = np.array([c.x for c in self.cones])
+        cy = np.array([c.y for c in self.cones])
+
+        xstack = np.array([xx]*len(cx))
+        ystack = np.array([yy]*len(cy))
+        if len(xx.shape)==2:
+            xstack = np.transpose(xstack,(1,2,0))
+            ystack = np.transpose(ystack,(1,2,0))
+        else:
+            xstack = xstack.T
+            ystack = ystack.T
+            
+        xstack = xstack - cx
+        ystack = ystack - cy
+        fstack = np.exp(-100*(xstack**2+ystack**2))
+        f = np.sum(fstack,axis=len(fstack.shape)-1)
+        return f
+
+    def step(self):
+        self.age = self.age + 1
+        for c in self.cones:
+            print c.index
+            c.step(self)
+        print 'Age: %d'%self.age
+
+    def show(self):
+        field = self.compute_total_field()
+        if self.clims is None:
+            self.clims = (field.min()*1.1,field.max()*.5)
+        plt.clf()
+        plt.imshow(field,extent=[xx.min(),xx.max(),yy.min(),yy.max()],interpolation='bilinear')
+        plt.colorbar()
+        plt.autoscale(False)
+        cx = [c.x for c in self.cones]
+        cy = [c.y for c in self.cones]
+        plt.plot(cx,cy,'k.')
+
+    def save(self,tag):
+        xfn = '%s_x.npy'%tag
+        yfn = '%s_y.npy'%tag
+        np.save(xfn,[c.x for c in self.cones])
+        np.save(yfn,[c.y for c in self.cones])
+
+        rec = [self.x1,self.x2,self.y1,self.y2]
+        rfn = '%s_bounds.npy'%tag
+        np.save(rfn,rec)
+
     def step0(self,power=1):
 
         # increment the landscape
