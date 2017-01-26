@@ -5,32 +5,25 @@ from matplotlib import pyplot as plt
 import os,sys
 from time import time,sleep
 from fig2gif import GIF
-from octopod import H5
-
-ACTIVATION_THRESHOLD = 20.0
+from cone_density import ConeDensityInterpolator
 
 class Cone:
 
     index = 0
-    slope = -20000
     
-    def __init__(self,x,y):
+    def __init__(self,x,y,intensity_mean=1000,intensity_std=50,rad=1):
         self.x = int(x)
         self.y = int(y)
         self.activation = np.inf
         self.index = Cone.index
         Cone.index = Cone.index + 1
 
-        #self.x_steps = np.array([-1,0,1,-1,0,1,-1,0,1]).astype(np.int)
-        #self.y_steps = np.array([-1,-1,-1,0,0,0,1,1,1]).astype(np.int)
-
-        rad = 1
         self.x_steps,self.y_steps = np.meshgrid(np.arange(-rad,rad+1),np.arange(-rad,rad+1))
         self.x_steps = self.x_steps.ravel()
         self.y_steps = self.y_steps.ravel()
-        self.intensity = 20+np.random.randn()
+        self.intensity = intensity_mean+intensity_std*np.random.randn()
         
-    def step(self,retina):
+    def step(self,retina,noisy=False):
 
         xx = self.x + self.x_steps
         yy = self.y + self.y_steps
@@ -39,26 +32,20 @@ class Cone:
         yy = yy%retina.N
 
         field = retina.field[yy,xx]
-        #noise = np.mean(field)*np.random.randn(len(field))*.1
+        if noisy:
+            noise = np.sqrt(field)*np.random.randn(len(field))
+            field = field + noise
         winner = np.argmin(field)
 
-        #plt.figure()
-        #plt.imshow(retina.field,interpolation='none')
-        
-        #print xx
-        #print yy
-        #print field
-        #print winner
         self.x = xx[winner]
         self.y = yy[winner]
-        
         self.activation = field[winner]
         
         
 
 class Retina:
 
-    def __init__(self,x1=-0.5,x2=0.5,y1=-0.5,y2=0.5,N=1024,k=2):
+    def __init__(self,x1=-0.5,x2=0.5,y1=-0.5,y2=0.5,N=255,central_field_strength=0,integrity=0.01,potential_slope=-20000,intensity_slope=-20000,N_cones=1):
         
         self.N = N
         self.x1 = min(x1,x2)
@@ -72,23 +59,28 @@ class Retina:
         self.xstep = float(self.dx)/float(N)
         self.ystep = float(self.dy)/float(N)
         
-        #self.XX,self.YY = np.meshgrid(np.arange(self.x1,self.x2+self.xstep,self.xstep),np.arange(self.y1,self.y2+self.ystep,self.ystep))
         self.XX,self.YY = np.meshgrid(np.linspace(self.x1,self.x2,self.N),np.linspace(self.y1,self.y2,self.N))
 
-        #for idx,x in enumerate(self.XX[0,:]):
-        #    print idx,x
-        #sys.exit()
-        
+        self.potential_slope = potential_slope
+        self.intensity_slope = intensity_slope
+       
+
+        self.d = np.sqrt(self.XX**2+self.YY**2)
         self.cones = []
         self.age = 0
-        self.clims = None
         self.field = np.zeros(self.XX.shape)
         self.centers = np.zeros(self.XX.shape)
         self.center_intensities = np.zeros(self.XX.shape)
         self.intensity = np.zeros(self.XX.shape)
-        self.k = k
-        self.cone_field = self.get_cone_profile(Cone.slope)
-        self.cone_profile = self.get_cone_profile(Cone.slope*3)
+        self.cone_field = self.get_cone_profile(self.potential_slope)
+        self.cone_profile = self.get_cone_profile(self.intensity_slope)
+        self.central_field_strength = central_field_strength
+        self.integrity = integrity
+        self.N_cones = N_cones
+
+        for n in range(N_cones):
+            self.add()
+        
         
     def get_random_coordinates(self):
         return np.random.randint(self.N),np.random.randint(self.N)
@@ -119,7 +111,7 @@ class Retina:
         self.cones.append(Cone(x,y))
 
     def get_central_field(self):
-        return np.sqrt(self.XX**2+self.YY**2)*5
+        return np.sqrt(self.XX**2+self.YY**2)*self.central_field_strength
 
     def get_cone_profile(self,slope):
         xx = self.XX - np.mean(self.XX)
@@ -179,13 +171,11 @@ class Retina:
         self.age = self.age + 1
         for idx,c in enumerate(self.cones):
             c.step(self)
-            if idx%5==0:
+            if idx%(round(1.0/self.integrity))==0:
                 self.compute_total_field()
         #print 'Age: %d'%self.age
 
     def show(self):
-        if self.clims is None:
-            self.clims = (self.field.min()*1.1,self.field.max()*.5)
         plt.clf()
         plt.subplot(1,2,1)
         clim = np.percentile(self.intensity,(2,99))
@@ -204,48 +194,44 @@ class Retina:
         
         #plt.ylim((self.YY.max(),self.YY.min()))
         
-    def save(self,tag):
+    def save(self,tag=None):
+        if tag is None:
+            tag = self.tag()
         xfn = '%s_x.npy'%tag
         yfn = '%s_y.npy'%tag
+        ifn = '%s_i.npy'%tag
         np.save(xfn,[c.x for c in self.cones])
         np.save(yfn,[c.y for c in self.cones])
+        np.save(ifn,[c.intensity for c in self.cones])
 
         rec = [self.x1,self.x2,self.y1,self.y2]
         rfn = '%s_bounds.npy'%tag
         np.save(rfn,rec)
 
+    def tag(self):
+        out = '%0.2f_%0.2f_%0.2f_%0.2f_%04d_%0.3f_%0.2f_%06d'%(self.x1,self.x2,self.y1,self.y2,self.N,self.integrity,self.central_field_strength,self.N_cones)
+        out = out.replace('-','m')
+        return out
         
 if __name__=='__main__':
 
 
     mini = False
+
+    quick = {'x1':-.25,'x2':.25,'y1':-.25,'y2':.25,'N':51,'integrity':.1,'central_field_strength':5.0,'N_cones':200}
+    full = {'x1':-.25,'x2':.25,'y1':-.25,'y2':.25,'N':251,'integrity':.1,'central_field_strength':2.0,'N_cones':2000}
     
-    if mini:
-        r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N=251)
-        for k in range(100):
-            r.add()
+    r = Retina(**full)
+    tag = r.tag()
 
-        plt.figure()
-        for k in range(10):
-            r.step()
-            #plt.show()
-            plt.pause(.0001)
-
-    else:
-        r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N=255)
-        for k in range(4000):
-            r.add()
-            #r.show(xx,yy)
-            #plt.pause(.00001)
-
-        mov = GIF('retina.gif',fps=3)
-        f = plt.figure(figsize=(24,12))
-        for k in range(100):
-            t0 = time()
-            r.step()
-            plt.pause(.001)
-            mov.add(f)
-            dt = time()-t0
-            print dt
-        mov.make()
-        r.save('foo')
+    mov = GIF('%s.gif'%tag,fps=3)
+    f = plt.figure(figsize=(16,8))
+    for k in range(100):
+        t0 = time()
+        r.step()
+        plt.pause(.001)
+        mov.add(f)
+        dt = time()-t0
+        print dt
+    mov.make()
+    r.save(tag)
