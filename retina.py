@@ -226,8 +226,8 @@ if __name__=='__main__':
             plt.pause(.0001)
 
     else:
-        r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N=255)
-        for k in range(450):
+        r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N=155)
+        for k in range(4500):
             r.add()
             #r.show(xx,yy)
             #plt.pause(.00001)
@@ -242,5 +242,4 @@ if __name__=='__main__':
             dt = time()-t0
             print dt
         mov.make()
-        plt.show()
         r.save('foo')
