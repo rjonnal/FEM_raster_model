@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import interpolate
+from scipy.signal import convolve2d
 from matplotlib import pyplot as plt
 import os,sys
 from time import time,sleep
@@ -22,7 +23,6 @@ class Cone:
         
     def step(self,retina,N=360):
 
-
         theta = np.linspace(0,np.pi*2,N)
         #xx = retina.xidx(self.x+np.cos(theta)*step_size)
         #yy = retina.yidx(self.y+np.sin(theta)*step_size)
@@ -43,12 +43,12 @@ class Cone:
 class Retina:
 
     def __init__(self,x1=-0.5,x2=0.5,y1=-0.5,y2=0.5,N=1024):
+        
         self.N = N
         self.x1 = min(x1,x2)
         self.x2 = max(x1,x2)
         self.y1 = min(y1,y2)
         self.y2 = max(y1,y2)
-
         
         self.dx = self.x2 - self.x1
         self.dy = self.y2 - self.y1
@@ -97,7 +97,6 @@ class Retina:
         f = np.exp(Cone.slope*((xx**2)+(yy**2)))
         return f
                    
-
     def compute_total_field(self):
         centers = np.zeros(self.XX.shape)
 
@@ -112,7 +111,45 @@ class Retina:
         cone_field = self.get_cone_field()
 
         # convolve cone centers with the single cone field to get the aggregate field
-        field = np.abs(np.fft.ifftshift(np.fft.ifft2((np.fft.fft2(centers)*np.fft.fft2(cone_field)))))
+        def conv(a,b,k=2):
+            sy,sx = a.shape
+            # fft both
+            af = np.fft.fft2(a,s=(sy*k,sx*k))
+            bf = np.fft.fft2(b,s=(sy*k,sx*k))
+
+            # block swap them and multiply
+            #afs = np.fft.fftshift(af)
+            #bfs = np.fft.fftshift(bf)
+            #abf = afs*bfs
+            
+            # multiply
+            abf = af*bf
+            #abf = np.fft.ifftshift(abf)
+            
+            # inverse fft
+            abfi = np.fft.ifft2(abf)
+            #abfi = np.fft.ifftshift(abfi)
+            return np.abs(abfi)
+
+        field1 = conv(centers,cone_field)
+        #field1 = np.abs(np.fft.ifftshift(np.fft.ifft2((np.fft.fft2(centers)*np.fft.fft2(cone_field)))))
+        field2 = convolve2d(centers,cone_field,mode='same')
+
+        
+        plt.figure()
+        plt.subplot(2,2,1)
+        plt.imshow(centers,interpolation='none')
+        plt.colorbar()
+        plt.subplot(2,2,2)
+        plt.imshow(cone_field,interpolation='none')
+        plt.colorbar()
+        plt.subplot(2,2,3)
+        plt.imshow(field1,interpolation='none')
+        plt.colorbar()
+        plt.subplot(2,2,4)
+        plt.imshow(field2,interpolation='none')
+        plt.colorbar()
+        plt.show()
         
         # add the central potential
         field = field + self.get_central_field()
@@ -143,6 +180,9 @@ class Retina:
         cx = [c.x for c in self.cones]
         cy = [c.y for c in self.cones]
         plt.plot(cx,cy,'ko')
+        for x,y in zip(cx,cy):
+            print 'Cone at %0.3f,%0.3f'%(x,y)
+        
         #plt.ylim((self.YY.max(),self.YY.min()))
         
     def save(self,tag):
@@ -159,16 +199,17 @@ class Retina:
 if __name__=='__main__':
 
 
-    mini = False
+    mini = True
     
     if mini:
-        r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N=25)
-        for k in range(1):
+        r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N=32)
+        for k in range(3):
             r.add()
 
         plt.figure()
         for k in range(20):
             r.step()
+            plt.show()
             plt.pause(5)
 
     else:
