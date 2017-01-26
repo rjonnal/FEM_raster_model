@@ -11,6 +11,7 @@ octopod_config.py
 *.pyc
 *.hdf5
 *.gif
+*.tmp
 
 # Packages #
 ############
