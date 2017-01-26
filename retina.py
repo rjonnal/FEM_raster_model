@@ -28,6 +28,7 @@ class Cone:
         self.x_steps,self.y_steps = np.meshgrid(np.arange(-rad,rad+1),np.arange(-rad,rad+1))
         self.x_steps = self.x_steps.ravel()
         self.y_steps = self.y_steps.ravel()
+        self.intensity = 20+np.random.randn()
         
     def step(self,retina):
 
@@ -83,7 +84,11 @@ class Retina:
         self.clims = None
         self.field = np.zeros(self.XX.shape)
         self.centers = np.zeros(self.XX.shape)
+        self.center_intensities = np.zeros(self.XX.shape)
+        self.intensity = np.zeros(self.XX.shape)
         self.k = k
+        self.cone_field = self.get_cone_profile(Cone.slope)
+        self.cone_profile = self.get_cone_profile(Cone.slope*3)
         
     def get_random_coordinates(self):
         return np.random.randint(self.N),np.random.randint(self.N)
@@ -116,25 +121,24 @@ class Retina:
     def get_central_field(self):
         return np.sqrt(self.XX**2+self.YY**2)*5
 
-    def get_cone_field(self):
+    def get_cone_profile(self,slope):
         xx = self.XX - np.mean(self.XX)
         yy = self.YY - np.mean(self.YY)
-        f = np.exp(Cone.slope*((xx**2)+(yy**2)))
+        f = np.exp(slope*((xx**2)+(yy**2)))
         return f
                    
     def compute_total_field(self):
-        centers = np.zeros(self.XX.shape)
-
+        self.centers = np.zeros(self.XX.shape)
+        self.center_intensities = np.zeros(self.XX.shape)
+        
         xidx = [c.x for c in self.cones]
         yidx = [c.y for c in self.cones]
-
-        for x,y in zip(xidx,yidx):
-            centers[y,x] = centers[y,x] + 1
-
-        self.centers = centers
+        iidx = [c.intensity for c in self.cones]
         
-        cone_field = self.get_cone_field()
-
+        for x,y,I in zip(xidx,yidx,iidx):
+            self.centers[y,x] = self.centers[y,x] + 1
+            self.center_intensities[y,x] = self.center_intensities[y,x]+I
+        
         # convolve cone centers with the single cone field to get the aggregate field
         def conv(a,b):
             
@@ -159,7 +163,8 @@ class Retina:
             
             return np.abs(abfi)
 
-        field = conv(centers,cone_field)
+        field = conv(self.centers,self.cone_field)
+        self.intensity = conv(self.center_intensities,self.cone_profile)
         #field_sanity_check = convolve2d(centers,cone_field,mode='same')
         #assert(np.allclose(field,field_sanity_check))
         
@@ -174,7 +179,7 @@ class Retina:
         self.age = self.age + 1
         for idx,c in enumerate(self.cones):
             c.step(self)
-            if idx%10==0:
+            if idx%5==0:
                 self.compute_total_field()
         #print 'Age: %d'%self.age
 
@@ -183,7 +188,8 @@ class Retina:
             self.clims = (self.field.min()*1.1,self.field.max()*.5)
         plt.clf()
         plt.subplot(1,2,1)
-        plt.imshow(self.centers,extent=[self.XX.min(),self.XX.max(),self.YY.min(),self.YY.max()],interpolation='none')
+        clim = np.percentile(self.intensity,(2,99))
+        plt.imshow(self.intensity,extent=[self.XX.min(),self.XX.max(),self.YY.min(),self.YY.max()],interpolation='none',cmap='gray',clim=clim)
         plt.colorbar()
         plt.subplot(1,2,2)
         #plt.imshow(self.field,extent=[self.XX.min(),self.XX.max(),self.YY.min(),self.YY.max()],interpolation='none')
@@ -215,8 +221,8 @@ if __name__=='__main__':
     mini = False
     
     if mini:
-        r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N=51)
-        for k in range(200):
+        r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N=251)
+        for k in range(100):
             r.add()
 
         plt.figure()
@@ -226,15 +232,15 @@ if __name__=='__main__':
             plt.pause(.0001)
 
     else:
-        r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N=155)
-        for k in range(4500):
+        r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N=255)
+        for k in range(4000):
             r.add()
             #r.show(xx,yy)
             #plt.pause(.00001)
 
-        mov = GIF('retina.gif')
-        f = plt.figure()
-        for k in range(10):
+        mov = GIF('retina.gif',fps=3)
+        f = plt.figure(figsize=(24,12))
+        for k in range(100):
             t0 = time()
             r.step()
             plt.pause(.001)
