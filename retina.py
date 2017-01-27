@@ -6,12 +6,13 @@ import os,sys
 from time import time,sleep
 from fig2gif import GIF
 from cone_density import ConeDensityInterpolator
+from random import shuffle
 
 class Cone:
 
     index = 0
     
-    def __init__(self,x,y,intensity_mean=1000,intensity_std=50,rad=1):
+    def __init__(self,x,y,intensity_mean=1000,intensity_std=50,rad=2):
         self.x = int(x)
         self.y = int(y)
         self.activation = np.inf
@@ -45,7 +46,7 @@ class Cone:
 
 class Retina:
 
-    def __init__(self,x1=-0.5,x2=0.5,y1=-0.5,y2=0.5,N=255,central_field_strength=0,integrity=0.01,potential_slope=-20000,intensity_slope=-20000,N_cones=1):
+    def __init__(self,x1=-0.5,x2=0.5,y1=-0.5,y2=0.5,N=255,central_field_strength=0,integrity=0.01,potential_slope=-10000,intensity_slope=-25000,N_cones=1):
         
         self.N = N
         self.x1 = min(x1,x2)
@@ -166,6 +167,7 @@ class Retina:
         self.field = field
 
     def step(self,do_plot=True):
+        shuffle(self.cones)
         if do_plot:
             self.show()
         self.age = self.age + 1
@@ -219,18 +221,19 @@ if __name__=='__main__':
     mini = False
 
     quick = {'x1':-.25,'x2':.25,'y1':-.25,'y2':.25,'N':51,'integrity':.1,'central_field_strength':5.0,'N_cones':200}
-    full = {'x1':-.25,'x2':.25,'y1':-.25,'y2':.25,'N':251,'integrity':.1,'central_field_strength':2.0,'N_cones':2000}
+    full = {'x1':-.25,'x2':.25,'y1':-.25,'y2':.25,'N':251,'integrity':.01,'central_field_strength':2.0,'N_cones':2000}
     
     r = Retina(**full)
     tag = r.tag()
 
     mov = GIF('%s.gif'%tag,fps=3)
     f = plt.figure(figsize=(16,8))
-    for k in range(100):
+    for k in range(50):
         t0 = time()
         r.step()
         plt.pause(.001)
-        mov.add(f)
+        if k>0:
+            mov.add(f)
         dt = time()-t0
         print dt
     mov.make()
