@@ -1,5 +1,3 @@
-octopod_config.py
-
 # Compiled source #
 ###################
 *.com
@@ -12,6 +10,7 @@ octopod_config.py
 *.hdf5
 *.gif
 *.tmp
+*.npy
 
 # Packages #
 ############
