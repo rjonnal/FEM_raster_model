@@ -46,7 +46,7 @@ class Cone:
 
 class Retina:
 
-    def __init__(self,x1=-0.5,x2=0.5,y1=-0.5,y2=0.5,N=255,central_field_strength=0,integrity=0.01,potential_slope=-10000,intensity_slope=-25000,N_cones=1):
+    def __init__(self,x1=-0.5,x2=0.5,y1=-0.5,y2=0.5,N=255,central_field_strength=0,integrity=0.01,potential_slope=-10000,intensity_slope=-25000,N_cones=0):
         
         self.N = N
         self.x1 = min(x1,x2)
@@ -65,7 +65,6 @@ class Retina:
         self.potential_slope = potential_slope
         self.intensity_slope = intensity_slope
        
-
         self.d = np.sqrt(self.XX**2+self.YY**2)
         self.cones = []
         self.age = 0
