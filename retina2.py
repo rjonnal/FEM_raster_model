@@ -40,7 +40,7 @@ class Retina:
         
         self.XX,self.YY = self.XX.ravel(),self.YY.ravel()
 
-        self.neighborhood = self.locality*3
+        self.neighborhood = self.locality
 
         potential_fwhm_deg = potential_fwhm_m/3e-4
         
@@ -73,9 +73,22 @@ class Retina:
         field = np.exp(-(dx**2+dy**2)/(2.0*self.potential_sigma**2)).T
         field = np.sum(field,axis=0)
 
-        cfield = np.sqrt(xx**2+yy**2)*self.central_field_strength
-        #plt.imshow(np.reshape(cfield,(self.NY,self.NX)))
-        #plt.show()
+
+        # box coords for plotting
+        x1 = np.min(xx)
+        x2 = np.max(xx)
+        y1 = np.min(yy)
+        y2 = np.max(yy)
+        
+        plt.subplot(1,2,1)
+        plt.plot(x,y,'ro')
+        self.plot()
+        plt.plot([x1,x2,x2,x1,x1],[y1,y1,y2,y2,y1],'b-')
+        plt.subplot(1,2,2)
+        plt.imshow(np.reshape(field,(self.NY,self.NX)),interpolation='none')
+        plt.show()
+
+        cfield = 0*np.exp(xx**2+yy**2)*self.central_field_strength
         
         field = field + cfield
         return field,neighbors
