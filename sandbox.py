@@ -5,6 +5,16 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 
+if True:
+    xx,yy = np.meshgrid(np.linspace(-1,1,256),np.linspace(-1,1,256))
+    im = xx**2+yy**2
+    #im = np.sqrt(xx**2+yy**2)
+    #im = np.exp(xx**2+yy**2)
+    plt.imshow(im)
+    plt.colorbar()
+    plt.show()
+    
+
 if False:
 
     # deformation of the field due to a movement to this position:
@@ -29,7 +39,7 @@ if False:
     plt.show()
 
 # saccade potential
-if True:
+if False:
     L = 51.0
     L0 = (L-1.0)/2.0
     II,JJ = np.meshgrid(np.arange(L),np.arange(L))

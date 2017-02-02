@@ -13,6 +13,7 @@ class Retina:
     def __init__(self,x1=-0.25,x2=0.25,y1=-0.25,y2=0.25,central_field_strength=0.0,potential_fwhm_deg=1e-6,N_cones=0,locality=0.05,granularity=0.001):
 
         self.age = 0
+        self.factor = np.exp(-self.age/10.0)
         self.x1 = min(x1,x2)
         self.x2 = max(x1,x2)
         self.y1 = min(y1,y2)
@@ -35,22 +36,8 @@ class Retina:
 
         self.locality = locality
         self.granularity = granularity
-
-        self.XX,self.YY = np.meshgrid(np.arange(-locality,locality+granularity,granularity),
-                                      np.arange(-locality,locality+granularity,granularity))
-
-        
-
-        self.subx1 = np.min(self.XX)
-        self.subx2 = np.max(self.XX)
-        self.subdx = self.subx2-self.subx1
-        self.suby1 = np.min(self.YY)
-        self.suby2 = np.max(self.YY)
-        self.subdy = self.suby2-self.suby1
-        self.NX,self.NY = self.XX.shape
-        
-        self.XX,self.YY = self.XX.ravel(),self.YY.ravel()
-
+        self.theta_step = np.pi/100.0
+        self.theta = np.arange(0,np.pi*2,self.theta_step)
         self.neighborhood = self.locality
 
         self.potential_sigma = potential_fwhm_deg/(2.0*np.sqrt(2.0*np.log(2)))
@@ -64,8 +51,20 @@ class Retina:
 
     def compute_field(self,x,y):
         neighbors = self.find_neighbors(x,y,self.neighborhood)
-        xx = self.XX.copy()+x
-        yy = self.YY.copy()+y
+
+        theta = self.theta + np.random.rand()*self.theta_step
+
+        #self.factor = np.exp(-self.age/50.0)
+        mag = self.factor*self.granularity
+        
+        XX = np.cos(theta)*mag
+        YY = np.sin(theta)*mag
+        XX = np.array(list(XX)+[0.0])
+        YY = np.array(list(YY)+[0.0])
+        
+        xx = XX+x
+        yy = YY+y
+        
         return self.compute_field_helper(xx,yy,neighbors)
 
     def compute_full_field(self,N=64):
@@ -84,6 +83,7 @@ class Retina:
         dx = np.tile(xx,(N_neighbors,1)).T
         dy = np.tile(yy,(N_neighbors,1)).T
 
+        
         # get the coordinates of the neighbors
         neighbor_x_coords = self.cones_x[neighbors]
         neighbor_y_coords = self.cones_y[neighbors]
@@ -93,27 +93,16 @@ class Retina:
 
         field = np.exp(-(dx**2+dy**2)/(2.0*self.potential_sigma**2))
 
-        field = field + np.sqrt(field)*np.random.randn(*field.shape)*0
-
-        
-        if False:
-            plt.figure()
-            plt.imshow(dx,interpolation='none')
-            plt.colorbar()
-            plt.figure()
-            plt.imshow(dy,interpolation='none')
-            plt.colorbar()
-            plt.figure()
-            plt.imshow(field,interpolation='none')
-            plt.colorbar()
-            plt.show()
+        #field = field + np.sqrt(field)*np.random.randn(*field.shape)
         
         field = np.sum(field,axis=0)
-
         if False:
             plt.figure()
             self.plot()
-            plt.plot(x,y,'gs')
+            plt.plot(xx,yy,'gs')
+            plt.figure()
+            self.plot()
+            plt.plot(dx,dy,'gs')
             plt.figure()
             plt.plot(field)
             plt.show()
@@ -137,7 +126,7 @@ class Retina:
         cfield = np.sqrt(xx**2+yy**2)*self.central_field_strength
         
         field = field + cfield
-        return field,neighbors
+        return field,neighbors,xx,yy
 
     def xidx(self,x):
         return (x-self.subx1)/self.subdx*self.NX
@@ -180,51 +169,58 @@ class Retina:
         oldys = []
         newxs = []
         newys = []
+        vars = []
         for idx in idx_vec:
             #print '\t%d'%idx
             x,y = self.cones_x[idx],self.cones_y[idx]
-            f,n = self.compute_field(x,y)
+            f,n,XX,YY = self.compute_field(x,y)
             #print f
-            winners = list(np.where(f==np.min(f))[0])
+            fmin = np.min(f)
+            vars.append(np.var(f))
+            #print fmin,
+            winners = list(np.where(f==fmin)[0])
             #shuffle(winners)
             #print winners
             oldxs.append(self.cones_x[idx])
             oldys.append(self.cones_y[idx])
-            self.cones_x[idx] = x + self.XX[winners[0]]
-            self.cones_y[idx] = y + self.YY[winners[0]]
+            self.cones_x[idx] = XX[winners[0]]
+            self.cones_y[idx] = YY[winners[0]]
             newxs.append(self.cones_x[idx])
             newys.append(self.cones_y[idx])
+        #print
 
+        #self.factor = np.sqrt(np.max(vars))*3.0
+        self.factor = np.sqrt(np.percentile(vars,99))*3.3
         G = 10
         if self.age%1==0:
             plt.clf()
-            plt.subplot(1,3,1)
+            plt.subplot(1,2,1)
             plt.cla()
             plt.semilogy(f)
             plt.ylim((0,len(self.cones_x)))
-            plt.subplot(1,3,2)
+            plt.subplot(1,2,2)
             plt.cla()
             self.plot()
             for oldx,oldy,newx,newy in zip(oldxs[-G:],oldys[-G:],newxs[-G:],newys[-G:]):
                 plt.plot([oldx,newx],[oldy,newy],'b-')
                 plt.plot(newx,newy,'ro')
-            plt.subplot(1,3,3)
-            if self.age%100==0:
-                plt.cla()
-                self.display_full_field(16)
+            #plt.subplot(1,3,3)
+            #if self.age%100==0:
+            #    plt.cla()
+            #    self.display_full_field(16)
             plt.pause(.001)
         
 if __name__=='__main__':
 
-    locality = 1e-3
+    locality = 1e-1
     granularity = locality/20.0
-    cone_potential_fwhm = locality/5.0*0.000001
+    cone_potential_fwhm = locality/10.0
     
-    r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=1000,locality=locality,granularity=granularity,central_field_strength=1.0e3,potential_fwhm_deg=cone_potential_fwhm)
+    r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=1000,locality=locality,granularity=granularity,central_field_strength=1.0e1,potential_fwhm_deg=cone_potential_fwhm)
     #r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=4000,locality=.0001,granularity=.00001,central_field_strength=1.0e-1,potential_fwhm_m=1e-7)
 
     
-    for k in range(5000):
-        print k
+    while r.factor>.01:
+        print r.factor
         r.step()
     plt.show()
