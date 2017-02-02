@@ -20,9 +20,12 @@ class Retina:
         self.y2 = max(y1,y2)
         self.dx = self.x2 - self.x1
         self.dy = self.y2 - self.y1
+        self.xmid = (self.x1+self.x2)/2.0
+        self.ymid = (self.y1+self.y2)/2.0
+        
 
 
-        max_rad = np.min(self.dx/2.0,self.dy/2.0)
+        max_rad = np.min(self.dx/2.0,self.dy/2.0)*np.sqrt(2)
         
         self.cones_rad = np.random.rand(N_cones)**.5*max_rad
         self.cones_theta = np.random.rand(N_cones)*np.pi*2
@@ -155,10 +158,42 @@ class Retina:
         plt.colorbar()
     
         
-    def plot(self):
+    def plot(self,zoom=1.0):
         plt.plot(self.cones_x,self.cones_y,'k.')
-        plt.xlim((self.x1,self.x2))
-        plt.ylim((self.y1,self.y2))
+
+        x1 = self.xmid-self.dx/2.0*np.sqrt(2)/zoom
+        x2 = self.xmid+self.dx/2.0*np.sqrt(2)/zoom
+        y1 = self.ymid-self.dy/2.0*np.sqrt(2)/zoom
+        y2 = self.ymid+self.dy/2.0*np.sqrt(2)/zoom
+        
+        plt.xlim((x1,x2))
+        plt.ylim((y1,y2))
+
+
+    def f2cdf(self,f):
+        # convert a field into a CDF such that the
+        # lowest points in the field have the highest
+        # chance of being selected
+        if not np.min(f)==np.max(f):
+            weights = np.max(f)-f
+        else:
+            weights = np.ones(f.shape)
+
+        csum = np.cumsum(weights)
+        cdf = csum/np.max(csum)
+
+        # search the weights for a random number
+        test = np.random.rand()
+        lower_bound = 0
+
+        for idx,p in enumerate(cdf):
+            if test>=lower_bound and test<=p:
+                winner = idx
+                break
+            lower_bound = p
+
+        return winner
+        
         
     def step(self):
         self.age = self.age + 1
@@ -170,57 +205,66 @@ class Retina:
         newxs = []
         newys = []
         vars = []
+        neighbor_counts = []
         for idx in idx_vec:
             #print '\t%d'%idx
             x,y = self.cones_x[idx],self.cones_y[idx]
             f,n,XX,YY = self.compute_field(x,y)
+            neighbor_counts.append(len(n))
             #print f
+
+            #f = f + np.sqrt(f)*np.random.randn(len(f))*.1
+            
             fmin = np.min(f)
             vars.append(np.var(f))
-            #print fmin,
-            winners = list(np.where(f==fmin)[0])
+            #winners = list(np.where(f==fmin)[0])
+            #winner = winners[0]
+            winner = self.f2cdf(f)
+
             #shuffle(winners)
             #print winners
             oldxs.append(self.cones_x[idx])
             oldys.append(self.cones_y[idx])
-            self.cones_x[idx] = XX[winners[0]]
-            self.cones_y[idx] = YY[winners[0]]
+            self.cones_x[idx] = XX[winner]
+            self.cones_y[idx] = YY[winner]
             newxs.append(self.cones_x[idx])
             newys.append(self.cones_y[idx])
         #print
 
         #self.factor = np.sqrt(np.max(vars))*3.0
-        self.factor = np.sqrt(np.percentile(vars,99))*3.3
+        self.factor = np.mean(vars)**.25*1.0
+        nn = np.mean(neighbor_counts)
+        
+        print 'f,',self.factor,'nn,',nn
         G = 10
         if self.age%1==0:
             plt.clf()
-            plt.subplot(1,2,1)
+            plt.subplot(1,3,1)
             plt.cla()
             plt.semilogy(f)
             plt.ylim((0,len(self.cones_x)))
-            plt.subplot(1,2,2)
+            plt.subplot(1,3,2)
             plt.cla()
             self.plot()
             for oldx,oldy,newx,newy in zip(oldxs[-G:],oldys[-G:],newxs[-G:],newys[-G:]):
                 plt.plot([oldx,newx],[oldy,newy],'b-')
                 plt.plot(newx,newy,'ro')
-            #plt.subplot(1,3,3)
-            #if self.age%100==0:
-            #    plt.cla()
-            #    self.display_full_field(16)
+            plt.subplot(1,3,3)
+            plt.cla()
+            self.plot(zoom=10.0)
             plt.pause(.001)
         
 if __name__=='__main__':
 
-    locality = 1e-1
-    granularity = locality/20.0
-    cone_potential_fwhm = locality/10.0
+    locality = .05
+    granularity = .005
+    cone_potential_fwhm = .01
     
-    r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=1000,locality=locality,granularity=granularity,central_field_strength=1.0e1,potential_fwhm_deg=cone_potential_fwhm)
+    r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=4500,locality=locality,granularity=granularity,central_field_strength=1.0e1,potential_fwhm_deg=cone_potential_fwhm)
     #r = Retina(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=4000,locality=.0001,granularity=.00001,central_field_strength=1.0e-1,potential_fwhm_m=1e-7)
 
     
-    while r.factor>.01:
-        print r.factor
+    while r.factor>.02:
+        #print r.factor
         r.step()
     plt.show()
