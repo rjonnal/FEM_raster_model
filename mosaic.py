@@ -47,7 +47,7 @@ class Mosaic:
 
         self.cone_potential_fwhm_deg = potential_fwhm_deg
         self.potential_sigma = potential_fwhm_deg/(2.0*np.sqrt(2.0*np.log(2)))
-        self.intensity_sigma = self.potential_sigma/2.0
+        self.intensity_sigma = self.potential_sigma
         self.central_field_strength = central_field_strength
         self.timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
@@ -63,9 +63,9 @@ class Mosaic:
         self.h5.put('/params/potential_sigma',self.potential_sigma)
         self.h5.put('/params/central_field_strength',self.central_field_strength)
         self.h5.put('/params/rect',[self.x1,self.x2,self.y1,self.y2])
+        self.h5.put('/inentsities',self.cones_I)
 
-
-    def make_mosaic(self,N=512):
+    def save_mosaic(self,N=512):
         x1 = self.x1
         x2 = self.x2
         y1 = self.y1
@@ -73,16 +73,13 @@ class Mosaic:
         xr = np.linspace(x1,x2,N)
         yr = np.linspace(y1,y2,N)
         XX,YY = np.meshgrid(xr,yr)
-        out = np.zeros(XX.shape)
+        out = np.zeros(XX.shape,dtype=np.float32)
         for idx,(x,y,I) in enumerate(zip(self.cones_x,self.cones_y,self.cones_I)):
             xx = XX - x
             yy = YY - y
             out = out + np.exp(-(xx**2+yy**2)/(2.0*self.intensity_sigma**2))*I
-        plt.figure()
-        plt.imshow(out,cmap='gray',interpolation='none')
-        plt.colorbar()
-        plt.show()
-        
+        self.h5.put('/%06d/mosaic'%self.age,out)
+        self.mosaic = out
             
     def get_tag(self):
         # main part of tag: ncones_centralfield_conefield_rect
@@ -106,8 +103,6 @@ class Mosaic:
         put('cones_x',self.cones_x)
         put('cones_y',self.cones_y)
         put('N_stationary',self.N_stationary)
-        
-    
     
     def find_neighbors(self,x,y,rad):
         d = np.sqrt((x-self.cones_x)**2+(y-self.cones_y)**2)
@@ -335,8 +330,8 @@ class Mosaic:
         
 if __name__=='__main__':
 
-    locality = .025
-    granularity = .00125
+    locality = .02
+    granularity = .0025
 
     cone_potential_fwhm_vec = [.01,.02]
     central_field_strength_vec = [5.0,10.0]
@@ -346,6 +341,10 @@ if __name__=='__main__':
     
             m = Mosaic(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=4500,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm)
 
-            while m.stationary_fraction()<.95 and m.age<100:
+            while m.stationary_fraction()<.95 and m.age<200:
+                plt.figure(1)
                 m.step()
-            m.make_mosaic()
+                m.save_mosaic()
+                plt.figure(2)
+                plt.imshow(m.mosaic,cmap='gray',interpolation='none')
+                plt.pause(1)
