@@ -12,7 +12,7 @@ import datetime
 
 class Mosaic:
 
-    def __init__(self,x1=-0.25,x2=0.25,y1=-0.25,y2=0.25,central_field_strength=0.0,potential_fwhm_deg=1e-6,N_cones=0,locality=0.05,granularity=0.001,noise=0.0):
+    def __init__(self,x1=-0.25,x2=0.25,y1=-0.25,y2=0.25,central_field_strength=10.0,potential_fwhm_deg=.01,N_cones=0,locality=0.02,granularity=0.0025,noise=0.0,intensity_fwhm_deg=.008):
 
         self.age = 0
         self.noise = noise
@@ -47,7 +47,7 @@ class Mosaic:
 
         self.cone_potential_fwhm_deg = potential_fwhm_deg
         self.potential_sigma = potential_fwhm_deg/(2.0*np.sqrt(2.0*np.log(2)))
-        self.intensity_sigma = self.potential_sigma
+        self.intensity_sigma = intensity_fwhm_deg/(2.0*np.sqrt(2.0*np.log(2)))
         self.central_field_strength = central_field_strength
         self.timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
@@ -64,8 +64,9 @@ class Mosaic:
         self.h5.put('/params/central_field_strength',self.central_field_strength)
         self.h5.put('/params/rect',[self.x1,self.x2,self.y1,self.y2])
         self.h5.put('/inentsities',self.cones_I)
+        self.h5.put('/age',self.age)
 
-    def save_mosaic(self,N=512):
+    def save_mosaic0(self,N=512):
         x1 = self.x1
         x2 = self.x2
         y1 = self.y1
@@ -80,7 +81,85 @@ class Mosaic:
             out = out + np.exp(-(xx**2+yy**2)/(2.0*self.intensity_sigma**2))*I
         self.h5.put('/%06d/mosaic'%self.age,out)
         self.mosaic = out
+
+    def save_mosaic(self,N=512):
+
+        profile = self.make_cone_profile(N)
+        
+        x1 = self.x1
+        x2 = self.x2
+        y1 = self.y1
+        y2 = self.y2
+        xr = np.linspace(x1,x2,N)
+        yr = np.linspace(y1,y2,N)
+        dx = np.mean(np.diff(xr))
+        dy = np.mean(np.diff(yr))
+        out = np.zeros((len(yr),len(xr)))
+        for idx,(x,y,I) in enumerate(zip(self.cones_x,self.cones_y,self.cones_I)):
+            if x>self.x1 and x<self.x2 and y>self.y1 and y<self.y2:
+                left = np.where(xr<x)[0][-1]
+                right = np.where(xr>=x)[0][0]
+                top = np.where(yr<y)[0][-1]
+                bottom = np.where(yr>=y)[0][0]
+
+                for py in [top,bottom]:
+                    for px in [left,right]:
+                        yfrac = 1.0-np.abs(yr[py]-y)/dy
+                        xfrac = 1.0-np.abs(xr[px]-x)/dx
+                        out[py,px] = xfrac*yfrac*I
+
+                if False:
+                    plt.subplot(1,2,1)
+                    plt.plot(x,y,'ks')
+                    plt.xlim((xr[left],xr[right]))
+                    plt.ylim((yr[top],yr[bottom]))
+                    plt.subplot(1,2,2)
+                    plt.imshow(out[top:bottom+1,left:right+1],interpolation='none')
+                    plt.colorbar()
+                    plt.show()
+            else:
+                continue
             
+        out = self.conv(out,profile)
+        self.h5.put('/%06d/mosaic'%self.age,out)
+        self.mosaic = out
+
+    def conv(self,a,b):
+        sy,sx = a.shape
+        # fft both after doubling size w/ zero-padding
+        # this prevents circular convolution
+        af = np.fft.fft2(a,s=(sy*2,sx*2))
+        bf = np.fft.fft2(b,s=(sy*2,sx*2))
+
+        # multiply
+        abf = af*bf
+
+        # inverse fft
+        abfi = np.fft.ifft2(abf)
+
+        # crop first (sy+1)//2-1 pixels because of zero-padding
+        y1 = (sy+1)//2-1
+        y2 = y1+sy
+        x1 = (sx+1)//2-1
+        x2 = x1+sx
+        abfi = abfi[y1:y2,x1:x2]
+        return np.abs(abfi)
+
+    def make_cone_profile(self,N):
+        x1 = self.x1
+        x2 = self.x2
+        y1 = self.y1
+        y2 = self.y2
+        xr = np.linspace(x1,x2,N)
+        xr = xr - np.mean(xr)
+        
+        yr = np.linspace(y1,y2,N)
+        yr = yr - np.mean(yr)
+        
+        xx,yy = np.meshgrid(xr,yr)
+        p = np.exp(-(xx**2+yy**2)/(2.0*self.intensity_sigma**2))
+        return p
+        
     def get_tag(self):
         # main part of tag: ncones_centralfield_conefield_rect
         fmts = ['%06d','%0.1f','%0.4f','%0.2f','%0.2f','%0.2f','%0.2f']
@@ -258,6 +337,7 @@ class Mosaic:
     
     def step(self):
         self.record()
+        self.save_mosaic()
         self.age = self.age + 1
         idx_vec = range(self.N_cones)
         #shuffle(idx_vec)
@@ -315,8 +395,8 @@ class Mosaic:
             plt.clf()
             plt.subplot(1,3,1)
             plt.cla()
-            plt.semilogy(f)
-            plt.ylim((0,len(self.cones_x)))
+            plt.imshow(self.mosaic,cmap='gray',interpolation='none')
+            plt.colorbar()
             plt.subplot(1,3,2)
             plt.cla()
             self.plot()
@@ -327,6 +407,7 @@ class Mosaic:
             plt.cla()
             self.plot(zoom=5.0)
             plt.pause(.001)
+        self.h5.put('/age',self.age)
         
 if __name__=='__main__':
 
@@ -342,9 +423,4 @@ if __name__=='__main__':
             m = Mosaic(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=4500,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm)
 
             while m.stationary_fraction()<.95 and m.age<200:
-                plt.figure(1)
                 m.step()
-                m.save_mosaic()
-                plt.figure(2)
-                plt.imshow(m.mosaic,cmap='gray',interpolation='none')
-                plt.pause(1)
