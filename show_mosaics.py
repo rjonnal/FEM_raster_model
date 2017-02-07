@@ -3,18 +3,16 @@ from matplotlib import pyplot as plt
 import os,sys
 import glob
 from data_store import H5
+from mosaic import Mosaic
 
 for f in glob.glob('./histories/*.hdf5'):
-    h5 = H5(f)
-    ages = []
-    for k in h5.keys():
-        try:
-            ages.append(int(k))
-        except:
-            pass
-    age_max = np.max(ages)
+    m = Mosaic(hdf5fn=f)
+    
+    cp = m.cone_potential_fwhm_deg
+    cfs = m.central_field_strength
+    
+    mosaic = m.get_mosaic(1024)
     plt.figure()
-    plt.imshow(h5.get('%06d/mosaic'%age_max),interpolation='none',cmap='gray')
-    plt.colorbar()
-
+    plt.imshow(mosaic,interpolation='none',cmap='gray')
+    plt.title('%0.5f,%0.1f'%(cp,cfs))
 plt.show()

@@ -12,60 +12,89 @@ import datetime
 
 class Mosaic:
 
-    def __init__(self,x1=-0.25,x2=0.25,y1=-0.25,y2=0.25,central_field_strength=10.0,potential_fwhm_deg=.01,N_cones=0,locality=0.02,granularity=0.0025,noise=0.0,intensity_fwhm_deg=.008):
+    def __init__(self,x1=-0.25,x2=0.25,y1=-0.25,y2=0.25,central_field_strength=10.0,potential_fwhm_deg=.01,N_cones=0,locality=0.02,granularity=0.0025,noise=0.0,intensity_fwhm_deg=.008,use_cdf=False,hdf5fn=None):
 
-        self.age = 0
         self.noise = noise
-        self.use_cdf = False
+        self.use_cdf = use_cdf
+
+        if hdf5fn is None:
+
+            self.age = 0
+            self.x1 = min(x1,x2)
+            self.x2 = max(x1,x2)
+            self.y1 = min(y1,y2)
+            self.y2 = max(y1,y2)
+            self.dx = self.x2 - self.x1
+            self.dy = self.y2 - self.y1
+            self.xmid = (self.x1+self.x2)/2.0
+            self.ymid = (self.y1+self.y2)/2.0
+            max_rad = np.min(self.dx/2.0,self.dy/2.0)*np.sqrt(2)
+
+            cones_rad = np.random.rand(N_cones)**.5*max_rad
+            cones_theta = np.random.rand(N_cones)*np.pi*2
+            self.cones_x = (np.cos(cones_theta)*cones_rad).astype(np.float32)
+            self.cones_y = (np.sin(cones_theta)*cones_rad).astype(np.float32)
+            self.cones_I = (10.0 + np.random.randn(N_cones)*2).clip(1.0,np.inf)
+
+            self.N_cones = N_cones
+            self.N_stationary = 0
+
+            self.locality = locality
+            self.granularity = granularity
+            self.theta_step = np.pi/100.0
+            self.theta = np.arange(0,np.pi*2,self.theta_step)
+            self.neighborhood = self.locality*2
+
+            self.cone_potential_fwhm_deg = potential_fwhm_deg
+            self.potential_sigma = potential_fwhm_deg/(2.0*np.sqrt(2.0*np.log(2)))
+            self.intensity_sigma = intensity_fwhm_deg/(2.0*np.sqrt(2.0*np.log(2)))
+            self.central_field_strength = central_field_strength
+
+            self.timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            self.tag = self.get_tag()
+            self.h5 = H5('./histories/%s.hdf5'%self.tag)
+            self.h5.put('/params/N_cones',self.N_cones)
+            self.h5.put('/params/locality',self.locality)
+            self.h5.put('/params/granularity',self.granularity)
+            self.h5.put('/params/theta_step',self.theta_step)
+            self.h5.put('/params/neighborhood',self.neighborhood)
+            self.h5.put('/params/cone_potential_fwhm_deg',self.cone_potential_fwhm_deg)
+            self.h5.put('/params/potential_sigma',self.potential_sigma)
+            
+            self.h5.put('/params/intensity_sigma',self.intensity_sigma)
+            self.h5.put('/params/central_field_strength',self.central_field_strength)
+            self.h5.put('/params/rect',[self.x1,self.x2,self.y1,self.y2])
+            self.h5.put('/intensities',self.cones_I)
+            self.h5.put('/age',self.age)
+
+        else:
+
+            self.timestamp = hdf5fn.split('_')[-1].replace('.hdf5','')
+            self.h5 = H5(hdf5fn)
+            self.N_cones = self.h5.get('/params/N_cones').value
+            self.locality = self.h5.get('/params/locality').value
+            self.granularity = self.h5.get('/params/granularity').value
+            self.theta_step = self.h5.get('/params/theta_step').value
+            self.neighborhood = self.h5.get('/params/neighborhood').value
+            self.cone_potential_fwhm_deg = self.h5.get('/params/cone_potential_fwhm_deg').value
+            self.intensity_sigma = self.h5.get('/params/intensity_sigma').value
+            self.potential_sigma = self.h5.get('/params/potential_sigma').value
+            self.central_field_strength = self.h5.get('/params/central_field_strength').value
+            self.x1,self.x2,self.y1,self.y2 = self.h5.get('/params/rect')[:]
+            self.cones_I = self.h5.get('/intensities')[:]
+            self.age = self.h5.get('/age').value-1
+            self.cones_x = self.h5.get('/%06d/cones_x'%self.age)
+            self.cones_y = self.h5.get('/%06d/cones_y'%self.age)
+            self.mosaic = self.h5.get('/%06d/mosaic'%self.age)
+
+            
+            self.dx = self.x2 - self.x1
+            self.dy = self.y2 - self.y1
+            self.xmid = (self.x1+self.x2)/2.0
+            self.ymid = (self.y1+self.y2)/2.0
+
         
-        self.x1 = min(x1,x2)
-        self.x2 = max(x1,x2)
-        self.y1 = min(y1,y2)
-        self.y2 = max(y1,y2)
-        self.dx = self.x2 - self.x1
-        self.dy = self.y2 - self.y1
-        self.xmid = (self.x1+self.x2)/2.0
-        self.ymid = (self.y1+self.y2)/2.0
-
-        max_rad = np.min(self.dx/2.0,self.dy/2.0)*np.sqrt(2)
         
-        self.cones_rad = np.random.rand(N_cones)**.5*max_rad
-        self.cones_theta = np.random.rand(N_cones)*np.pi*2
-        self.cones_x = (np.cos(self.cones_theta)*self.cones_rad).astype(np.float32)
-        self.cones_y = (np.sin(self.cones_theta)*self.cones_rad).astype(np.float32)
-
-        self.cones_I = (10.0 + np.random.randn(N_cones)*2).clip(1.0,np.inf)
-        
-        self.N_cones = N_cones
-        self.N_stationary = 0
-        
-        self.locality = locality
-        self.granularity = granularity
-        self.theta_step = np.pi/100.0
-        self.theta = np.arange(0,np.pi*2,self.theta_step)
-        self.neighborhood = self.locality*2
-
-        self.cone_potential_fwhm_deg = potential_fwhm_deg
-        self.potential_sigma = potential_fwhm_deg/(2.0*np.sqrt(2.0*np.log(2)))
-        self.intensity_sigma = intensity_fwhm_deg/(2.0*np.sqrt(2.0*np.log(2)))
-        self.central_field_strength = central_field_strength
-        self.timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-
-        self.tag = self.get_tag()
-        self.h5 = H5('./histories/%s.hdf5'%self.tag)
-
-        self.h5.put('/params/N_cones',self.N_cones)
-        self.h5.put('/params/locality',self.locality)
-        self.h5.put('/params/granularity',self.granularity)
-        self.h5.put('/params/theta_step',self.theta_step)
-        self.h5.put('/params/neighborhood',self.neighborhood)
-        self.h5.put('/params/cone_potential_fwhm_deg',self.cone_potential_fwhm_deg)
-        self.h5.put('/params/potential_sigma',self.potential_sigma)
-        self.h5.put('/params/central_field_strength',self.central_field_strength)
-        self.h5.put('/params/rect',[self.x1,self.x2,self.y1,self.y2])
-        self.h5.put('/inentsities',self.cones_I)
-        self.h5.put('/age',self.age)
-
     def save_mosaic0(self,N=512):
         x1 = self.x1
         x2 = self.x2
@@ -82,14 +111,15 @@ class Mosaic:
         self.h5.put('/%06d/mosaic'%self.age,out)
         self.mosaic = out
 
-    def save_mosaic(self,N=512):
+    def get_mosaic(self,N=512):
 
         profile = self.make_cone_profile(N)
-        
+
         x1 = self.x1
         x2 = self.x2
         y1 = self.y1
         y2 = self.y2
+        
         xr = np.linspace(x1,x2,N)
         yr = np.linspace(y1,y2,N)
         dx = np.mean(np.diff(xr))
@@ -119,11 +149,14 @@ class Mosaic:
                     plt.show()
             else:
                 continue
-            
         out = self.conv(out,profile)
+        return out
+        
+    def save_mosaic(self,N=512):
+        out = self.get_mosaic(N)
         self.h5.put('/%06d/mosaic'%self.age,out)
         self.mosaic = out
-
+        
     def conv(self,a,b):
         sy,sx = a.shape
         # fft both after doubling size w/ zero-padding
@@ -414,13 +447,17 @@ if __name__=='__main__':
     locality = .02
     granularity = .0025
 
-    cone_potential_fwhm_vec = [.01,.02]
-    central_field_strength_vec = [5.0,10.0]
+    # an excellent combination of these parameters is 0.01,5.0,4500
+    cone_potential_fwhm_vec = [.01]
+    central_field_strength_vec = [10.0]
 
+    use_cdf = False
+    
     for cone_potential_fwhm in cone_potential_fwhm_vec:
         for central_field_strength in central_field_strength_vec:
     
-            m = Mosaic(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=4500,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm)
+            #m = Mosaic(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=4500,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm,use_cdf=use_cdf)
+            m = Mosaic(x1=-.5,x2=.5,y1=-.5,y2=.5,N_cones=18000,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm,use_cdf=use_cdf)
 
             while m.stationary_fraction()<.95 and m.age<200:
                 m.step()

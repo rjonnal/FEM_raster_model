@@ -330,13 +330,10 @@ if __name__=='__main__':
     
     XX,YY = np.meshgrid(np.arange(-1,1,.005),np.arange(-1,1,.005))
     fig = plt.figure()
-    #ax = fig.gca(projection='3d')
     
     g = Gaze(drift_relaxation_rate=2.5,drift_potential_slope=1.0,saccade_potential_slope=2.0,fractional_saccade_activation_threshold=2.0,image=im)
     while True:
         g.step()
-        #g.plot_surface(ax,XX,YY)
         g.plot()
         plt.pause(.00001)
-            #sys.exit()
         
