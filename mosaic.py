@@ -444,8 +444,11 @@ class Mosaic:
         
 if __name__=='__main__':
 
-    locality = .02
-    granularity = .0025
+    # locality .02 finishes in < 1 min; .01 in 20 minutes; because the resulting granularity
+    # of .01 leads to far fewer stationary cones each step; locality .02 with granularity .02/16.0
+    # would be even slower; locality .01 with granularity .0025 would be quite a bit faster
+    locality = .01
+    granularity = locality/8.0#.0025
 
     # an excellent combination of these parameters is 0.01,5.0,4500
     cone_potential_fwhm_vec = [.01]
@@ -459,5 +462,5 @@ if __name__=='__main__':
             #m = Mosaic(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=4500,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm,use_cdf=use_cdf)
             m = Mosaic(x1=-.5,x2=.5,y1=-.5,y2=.5,N_cones=18000,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm,use_cdf=use_cdf)
 
-            while m.stationary_fraction()<.95 and m.age<200:
+            while m.stationary_fraction()<.9 and m.age<200:
                 m.step()
