@@ -16,7 +16,10 @@ class Mosaic:
 
         self.noise = noise
         self.use_cdf = use_cdf
-
+        self.gain = 1.0
+        self.N_neighbors = 0
+        self.N_stationary = 0
+        
         if hdf5fn is None:
 
             self.age = 0
@@ -37,7 +40,6 @@ class Mosaic:
             self.cones_I = (10.0 + np.random.randn(N_cones)*2).clip(1.0,np.inf)
 
             self.N_cones = N_cones
-            self.N_stationary = 0
 
             self.locality = locality
             self.granularity = granularity
@@ -215,7 +217,9 @@ class Mosaic:
         put('cones_x',self.cones_x)
         put('cones_y',self.cones_y)
         put('N_stationary',self.N_stationary)
-    
+        put('N_neighbors',self.N_neighbors)
+        put('gain',self.gain)
+        
     def find_neighbors(self,x,y,rad):
         d = np.sqrt((x-self.cones_x)**2+(y-self.cones_y)**2)
         neighbors = np.where(np.logical_and(d<rad,d>0))[0]
@@ -226,7 +230,10 @@ class Mosaic:
         neighbors = self.find_neighbors(x,y,self.neighborhood)
 
         theta = self.theta + np.random.rand()*self.theta_step
-        mag = self.granularity
+
+        self.gain = 1.0 - self.stationary_fraction()
+        
+        mag = self.granularity*self.gain
         
         XX = np.cos(theta)*mag
         YY = np.sin(theta)*mag
@@ -408,7 +415,8 @@ class Mosaic:
 
             if f[winner]==fmin:
                 n_expected = n_expected + 1
-            
+
+                
             if f[-1]==fmin:
                 self.N_stationary = self.N_stationary+1
                 winner = len(f)-1
@@ -420,9 +428,9 @@ class Mosaic:
             newxs.append(self.cones_x[idx])
             newys.append(self.cones_y[idx])
 
-        nn = np.mean(neighbor_counts)
+        self.N_neighbors = np.mean(neighbor_counts)
         
-        print 'N_stationary: %d (%d%%)'%(self.N_stationary,self.stationary_fraction()*100.)
+        print 'N_stationary: %d (%d%%), N_neighbors: %0.1f'%(self.N_stationary,self.stationary_fraction()*100.,self.N_neighbors)
         G = 10
         if self.age%1==0:
             plt.clf()

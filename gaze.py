@@ -1,13 +1,14 @@
 import numpy as np
 from matplotlib import pyplot as plt
-import os,sys
+import os,sys,time
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 
 
-DRIFT_SPEED = 6.0/6.0 # deg/s
-STEP_DURATION = 1e-1 # in seconds
+DRIFT_SPEED = 1.0 # deg/s
+#STEP_DURATION = 1e-3 # in seconds
+STEP_DURATION = 1.0/(512.0*30.0)
 STEEPNESS = 1.1/(DRIFT_SPEED*STEP_DURATION)
 
 class Feature:
@@ -81,6 +82,7 @@ class ConicalPotential(Feature):
 class FeatureSet:
 
     Aepsilon = .01
+    Aepsilon = .99
     def __init__(self):
         self.depressions = []
         self.age = 0
@@ -89,9 +91,8 @@ class FeatureSet:
         self.depressions.append(depression)
         
     def step(self,dt=STEP_DURATION):
+        #print len(self.depressions)
         self.age = self.age + dt
-        if self.age%10==0:
-            print 'age %d'%self.age
         for d in self.depressions:
             d.step()
             # remove depressions with negligible amplitudes
@@ -127,7 +128,7 @@ class FeatureSet:
 
 class GazeHistory:
 
-    drift_marker = 'ks'
+    drift_marker = 'k.'
     saccade_marker = 'r-'
     
     def __init__(self):
@@ -151,7 +152,7 @@ class Gaze:
     d_theta = np.pi/100.0
     step_size = DRIFT_SPEED*STEP_DURATION
     
-    def __init__(self,x0=0.0,y0=0.0,drift_relaxation_rate=1.0e-1,drift_potential_slope=1.0,saccade_potential_slope=2.0,fractional_saccade_activation_threshold=3.0,image=None):
+    def __init__(self,x0=0.0,y0=0.0,drift_relaxation_rate=1.0e-1,drift_potential_slope=1.0,saccade_potential_slope=2.0,fractional_saccade_activation_threshold=1.1,image=None,image_subtense=None):
         
         self.x = x0
         self.y = y0
@@ -171,11 +172,15 @@ class Gaze:
         else:
             self.image = image
         self.history = GazeHistory()
+        if image_subtense is None:
+            self.image_subtense = 1.0
+        else:
+            self.image_subtense = image_subtense
         
     def plot_surface(self,ax,xx,yy):
         self.landscape.plot3d(ax,xx,yy)
 
-    def plot(self,xlims=(-2,2),ylims=(-2,2),N=128):
+    def plot(self,xlims=(-.01,.01),ylims=(-.01,.01),N=128):
         plt.clf()
         plt.subplot(1,3,1)
         plt.cla()
@@ -193,9 +198,24 @@ class Gaze:
         plt.subplot(1,3,3)
         plt.cla()
         plt.imshow(self.image,cmap='gray',interpolation='none')
+
+        px_per_deg = float(self.image.shape[0])/self.image_subtense
+        winx = 500.
+        winy = 500.
+
+        xoff_px = self.x*px_per_deg
+        yoff_px = self.y*px_per_deg
+
         sy,sx = self.image.shape
-        plt.xlim((sx//2+50*self.x-400,sx//2+50*self.x+400))
-        plt.ylim((sy//2+50*self.y-400,sy//2+50*self.y+400))
+        xmid = sx/2.0
+        ymid = sy/2.0
+        x1 = xmid-winx/2.0+xoff_px
+        x2 = xmid+winx/2.0+xoff_px
+        y1 = ymid-winy/2.0+yoff_px
+        y2 = ymid+winy/2.0+yoff_px
+        
+        plt.xlim((x1,x2))
+        plt.ylim((y1,y2))
         
     def get_ring(self,r):
         thetas = np.arange(0,np.pi*2,self.d_theta)
@@ -204,15 +224,16 @@ class Gaze:
         return xx,yy
 
 
-    def step(self):
+    def step(self,show_time=False):
 
+        if show_time:
+            t0 = time.time()
         self.landscape.step()
         xarr = np.array([self.x])
         yarr = np.array([self.y])
         
         current_activation = self.landscape.evaluate(xarr,yarr) + self.conical_potential.evaluate(xarr,yarr)
         
-        print current_activation
         do_saccade = current_activation>self.saccade_threshold
 
         if do_saccade:
@@ -221,17 +242,18 @@ class Gaze:
         else:
             new_x,new_y = self.compute_drift()
             way='drift'
-        print '%sing from'%way,self.x,self.y
-        print 'to',new_x,new_y
-        print
+        #print '%sing from'%way,self.x,self.y
+        #print 'to',new_x,new_y
+        #print
         
         self.x = new_x
         self.y = new_y
-        
+
         self.history.add(new_x,new_y,do_saccade)
         
         self.landscape.add(Feature(new_x,new_y,self.drift_relaxation_rate))
-
+        if show_time:
+            print time.time()-t0
 
     def compute_saccade(self):
         # for saccades, unlike drifts, we have to compute the whole landscape
@@ -265,8 +287,8 @@ class Gaze:
         minimum = np.where(potential_surface==np.min(potential_surface))
         #print np.min(potential_surface),np.log(np.min(potential_surface))
         #print minimum
-        ymin = minimum[0]
-        xmin = minimum[1]
+        ymin = minimum[0][0]
+        xmin = minimum[1][0]
 
         new_x = xx[ymin,xmin]
         new_y = yy[ymin,xmin]
@@ -326,12 +348,13 @@ class Gaze:
 if __name__=='__main__':
 
 
-    im = np.load('./images/rocks.npy')
+    
+    im = np.load('./images/mosaic.npy')
     
     XX,YY = np.meshgrid(np.arange(-1,1,.005),np.arange(-1,1,.005))
     fig = plt.figure()
     
-    g = Gaze(drift_relaxation_rate=2.5,drift_potential_slope=1.0,saccade_potential_slope=2.0,fractional_saccade_activation_threshold=2.0,image=im)
+    g = Gaze(drift_relaxation_rate=2.5,drift_potential_slope=1.0,saccade_potential_slope=2.0,fractional_saccade_activation_threshold=2.0,image=im,image_subtense=1.0)
     while True:
         g.step()
         g.plot()
