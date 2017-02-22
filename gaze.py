@@ -6,7 +6,8 @@ from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 
 
-DRIFT_SPEED = 1.0 # deg/s
+#DRIFT_SPEED = 1.0 # deg/s
+DRIFT_SPEED = 5.0 # deg/s
 
 class Feature:
     A0 = 1.0 # initial amplitude
