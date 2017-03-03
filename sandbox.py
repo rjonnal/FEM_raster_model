@@ -5,7 +5,15 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 
+
 if True:
+    # a simple example of lag bias reconstruction
+    ob = np.load('./images/mosaic.npy')
+    print ob
+
+    
+
+if False:
     xx,yy = np.meshgrid(np.linspace(-1,1,256),np.linspace(-1,1,256))
     im = xx**2+yy**2
     #im = np.sqrt(xx**2+yy**2)
