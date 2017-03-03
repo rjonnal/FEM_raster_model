@@ -7,7 +7,8 @@ from matplotlib.ticker import LinearLocator, FormatStrFormatter
 
 
 #DRIFT_SPEED = 1.0 # deg/s
-DRIFT_SPEED = 5.0 # deg/s
+#DRIFT_SPEED = 5.0 # deg/s
+DRIFT_SPEED = 0.5 # deg/s
 
 class Feature:
     A0 = 1.0 # initial amplitude
@@ -80,7 +81,7 @@ class ConicalPotential(Feature):
 class FeatureSet:
 
     Aepsilon = .01
-    Aepsilon = .95
+    Aepsilon = .99999
     def __init__(self):
         self.depressions = []
         self.age = 0
@@ -270,11 +271,6 @@ class Gaze:
         plt.xlim((x1,x2))
         plt.ylim((y1,y2))
 
-        
-
-
-
-
 
         
 
@@ -310,13 +306,11 @@ class Gaze:
         
         self.x = new_x
         self.y = new_y
-        
-
         self.history.add(new_x,new_y,do_saccade)
         
         self.landscape.add(Feature(new_x,new_y,self.dt,self.drift_relaxation_rate))
         if show_time:
-            print 'age: %d ms, step time (real): %d ms, step history: %d'%(self.age*1000,(time.time()-t0)*1000,len(self.landscape.depressions))
+            print 'age: %d ms, step time (real): %d ms, step history: %d, x: %0.5f, y: %0.5f'%(self.age*1000,(time.time()-t0)*1000,len(self.landscape.depressions),self.x,self.y)
 
         self.age = self.age + self.dt
 
