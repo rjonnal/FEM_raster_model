@@ -12,7 +12,7 @@ class Raster:
     # This class needs an object to be imaged, and a Gaze object to move
     # it.
 
-    def __init__(self,mosaic,subtense,nx=64,ny=64,frame_rate=30.0,h5fn='./test.hdf5',n_frames=10000):
+    def __init__(self,mosaic,subtense,nx=128,ny=128,frame_rate=30.0,h5fn='./test.hdf5',n_frames=1000,drift_speed=1.0):
         
         self.mosaic = mosaic
         self.subtense = subtense
@@ -22,13 +22,13 @@ class Raster:
         self.nx = nx
         self.ny = ny
         self.n_frames = n_frames
-        self.mx0 = (self.sx-nx)//2-100
-        self.my0 = (self.sy-ny)//2-100
+        self.mx0 = (self.sx-nx)//2-150
+        self.my0 = (self.sy-ny)//2-150
         self.motion_free = self.mosaic[self.my0:self.my0+self.ny,self.mx0:self.mx0+self.nx]
 
         self.line_rate = float(frame_rate)*float(ny)
         self.dt = 1.0/self.line_rate
-        self.gaze = Gaze(self.dt,drift_relaxation_rate=1e-3,drift_potential_slope=2e5,saccade_potential_slope=2.0,fractional_saccade_activation_threshold=np.inf,image=self.mosaic,image_subtense=self.subtense)
+        self.gaze = Gaze(self.dt,drift_relaxation_rate=1e-3,drift_potential_slope=2e5,saccade_potential_slope=2.0,fractional_saccade_activation_threshold=np.inf,drift_speed=drift_speed,image=self.mosaic,image_subtense=self.subtense)
 
         self.h5 = H5(h5fn)
         self.h5.put('/config/n_depth',1)
@@ -36,6 +36,8 @@ class Raster:
         self.h5.put('/config/n_slow',self.ny)
         self.h5.put('/config/n_vol',self.n_frames)
         self.h5.put('/projections/SLO',np.zeros((self.n_frames,self.ny,self.nx)))
+        self.h5.put('/object/full',self.mosaic)
+        self.h5.put('/object/motion_free',self.motion_free)
         
     def get(self,n_frames=1,do_plot=False):
 
@@ -104,15 +106,25 @@ class Raster:
 
     def run(self,do_plot=False):
         for k in range(self.n_frames):
-            f = self.get(do_plot)
+            f = self.get(1,do_plot)
             self.h5['projections/SLO'][k,:,:] = f
         
 
 
 if __name__=='__main__':
 
-    im = np.load('./images/mosaic.npy')
-    subtense = float(np.max(im.shape))/512.0*0.5
+    obj_filename = './images/mosaic_2.npy'
+    tag = os.path.split(obj_filename)[1].replace('.npy','')
+
+    drift_speed = 1.0
+    dsstr = '%0.1f'%drift_speed
+    dsstr = dsstr.replace('.','p')
     
-    r = Raster(im,subtense)
-    r.run(True)
+    outfn = 'phantom_%s_drift_%s.hdf5'%(tag,dsstr)
+    outfn = os.path.join('/home/rjonnal/data/Dropbox/Share/ao_slo_data/Data/simulated',outfn)
+
+    im = np.load('./images/mosaic_2.npy')
+    subtense = float(np.max(im.shape))/512.0*1.0
+    
+    r = Raster(im,subtense,h5fn=outfn,drift_speed=drift_speed)
+    r.run(False)

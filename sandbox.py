@@ -9,7 +9,7 @@ from matplotlib.ticker import LinearLocator, FormatStrFormatter
 if True:
     # a simple example of lag bias reconstruction
     ob = np.load('./images/mosaic.npy')
-    print ob
+    
 
     
 

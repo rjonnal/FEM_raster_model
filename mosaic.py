@@ -434,17 +434,23 @@ class Mosaic:
         G = 10
         if self.age%1==0:
             plt.clf()
-            plt.subplot(1,3,1)
+            plt.subplot(2,2,1)
             plt.cla()
             plt.imshow(self.mosaic,cmap='gray',interpolation='none')
             plt.colorbar()
-            plt.subplot(1,3,2)
+            plt.subplot(2,2,2)
             plt.cla()
             self.plot()
             for oldx,oldy,newx,newy in zip(oldxs[-G:],oldys[-G:],newxs[-G:],newys[-G:]):
                 plt.plot([oldx,newx],[oldy,newy],'b-')
                 plt.plot(newx,newy,'ro')
-            plt.subplot(1,3,3)
+            plt.subplot(2,2,3)
+            plt.cla()
+            sy,sx = self.mosaic.shape
+            my,mx = sy//2,sx//2
+            plt.imshow(self.mosaic[my-50:my+50,mx-50:mx+50],cmap='gray',interpolation='none')
+            plt.colorbar()
+            plt.subplot(2,2,4)
             plt.cla()
             self.plot(zoom=5.0)
             plt.pause(.001)
@@ -459,7 +465,7 @@ if __name__=='__main__':
     granularity = locality/8.0#.0025
 
     # an excellent combination of these parameters is 0.01,5.0,4500
-    cone_potential_fwhm_vec = [.01]
+    cone_potential_fwhm_vec = [.010]
     central_field_strength_vec = [10.0]
 
     use_cdf = False
@@ -468,7 +474,7 @@ if __name__=='__main__':
         for central_field_strength in central_field_strength_vec:
     
             #m = Mosaic(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=4500,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm,use_cdf=use_cdf)
-            m = Mosaic(x1=-.5,x2=.5,y1=-.5,y2=.5,N_cones=18000,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm,use_cdf=use_cdf)
+            m = Mosaic(x1=-.5,x2=.5,y1=-.5,y2=.5,N_cones=20000,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm,use_cdf=use_cdf)
 
             while m.stationary_fraction()<.9 and m.age<200:
                 m.step()

@@ -8,17 +8,18 @@ from matplotlib.ticker import LinearLocator, FormatStrFormatter
 
 #DRIFT_SPEED = 1.0 # deg/s
 #DRIFT_SPEED = 5.0 # deg/s
-DRIFT_SPEED = 0.5 # deg/s
+#DRIFT_SPEED = 0.5 # deg/s
 
 class Feature:
     A0 = 1.0 # initial amplitude
-    def __init__(self,x,y,dt,relaxation_rate):
+    def __init__(self,x,y,dt,relaxation_rate,drift_speed=1.0):
         self.age = 0.0
         self.x = x
         self.y = y
         self.A = self.A0
         self.relaxation_rate = relaxation_rate
         self.dt = dt
+        self.drift_speed = drift_speed
         
     def step(self):
         self.age = self.age + self.dt
@@ -27,7 +28,7 @@ class Feature:
     def evaluate_pit(self,xx0,yy0):
         d = np.sqrt((xx0-self.x)**2+(yy0-self.y)**2)
         height = np.ones(xx0.shape)*self.A
-        test = np.where(d>self.dt*DRIFT_SPEED)
+        test = np.where(d>self.dt*self.drift_speed)
         height[test] = 0.0
         return height
         
@@ -62,7 +63,7 @@ class ConicalPotential(Feature):
     # in its step() function
     
     def __init__(self,x,y,dt,L=1.0):
-        Feature.__init__(self,x,y,dt,relaxation_rate=1.0)
+        Feature.__init__(self,x,y,dt,relaxation_rate=1.0,drift_speed=0.0)
         self.L = L
         self.A = 1.0
         
@@ -164,11 +165,12 @@ class GazeHistory:
 class Gaze:
 
     
-    def __init__(self,dt,x0=0.0,y0=0.0,drift_relaxation_rate=1.0e-1,drift_potential_slope=1.0,saccade_potential_slope=2.0,fractional_saccade_activation_threshold=1.1,image=None,image_subtense=None):
+    def __init__(self,dt,x0=0.0,y0=0.0,drift_relaxation_rate=1.0e-1,drift_potential_slope=1.0,saccade_potential_slope=2.0,fractional_saccade_activation_threshold=1.1,drift_speed=0.5,image=None,image_subtense=None):
 
         self.d_theta = np.pi/100.0
         self.dt = dt
-        self.step_size = DRIFT_SPEED*self.dt
+        self.drift_speed = drift_speed
+        self.step_size = self.drift_speed*self.dt
         self.age = 0.0
         self.x = x0
         self.y = y0
@@ -183,7 +185,7 @@ class Gaze:
         self.x_path = []
         self.y_path = []
         self.landscape = FeatureSet()
-        self.landscape.add(Feature(self.dt,x0,y0,relaxation_rate=self.drift_relaxation_rate))
+        self.landscape.add(Feature(self.dt,x0,y0,relaxation_rate=self.drift_relaxation_rate,drift_speed=self.drift_speed))
         self.conical_potential = ConicalPotential(x0,y0,self.dt,L=drift_potential_slope)
         if image is None:
             self.image = np.zeros((100,100))
@@ -308,7 +310,7 @@ class Gaze:
         self.y = new_y
         self.history.add(new_x,new_y,do_saccade)
         
-        self.landscape.add(Feature(new_x,new_y,self.dt,self.drift_relaxation_rate))
+        self.landscape.add(Feature(new_x,new_y,self.dt,self.drift_relaxation_rate,self.drift_speed))
         if show_time:
             print 'age: %d ms, step time (real): %d ms, step history: %d, x: %0.5f, y: %0.5f'%(self.age*1000,(time.time()-t0)*1000,len(self.landscape.depressions),self.x,self.y)
 
