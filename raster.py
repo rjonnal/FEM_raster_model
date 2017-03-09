@@ -40,6 +40,12 @@ class Raster:
         self.h5.put('/trace/y',np.zeros((self.n_frames,self.ny)))
         self.h5.put('/object/full',self.mosaic)
         self.h5.put('/object/motion_free',self.motion_free)
+        self.h5.put('/object/full_subtense',self.subtense)
+        self.h5.put('/object/full_mosaic',self.mosaic)
+
+        fsy,fsx = self.mosaic.shape
+        frame_subtense = float(fsx)/float(self.nx)*self.subtense
+        self.h5.put('/config/subtense',frame_subtense)
         
     def get(self,n_frames=1,do_plot=False):
 
