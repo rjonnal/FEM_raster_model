@@ -36,6 +36,8 @@ class Raster:
         self.h5.put('/config/n_slow',self.ny)
         self.h5.put('/config/n_vol',self.n_frames)
         self.h5.put('/projections/SLO',np.zeros((self.n_frames,self.ny,self.nx)))
+        self.h5.put('/trace/x',np.zeros((self.n_frames,self.ny)))
+        self.h5.put('/trace/y',np.zeros((self.n_frames,self.ny)))
         self.h5.put('/object/full',self.mosaic)
         self.h5.put('/object/motion_free',self.motion_free)
         
@@ -102,14 +104,14 @@ class Raster:
         dt = time.time()-t0
 
         frame = (frame*1000).astype(np.uint16)
-        return frame
+        return frame,gx,gy
 
     def run(self,do_plot=False):
         for k in range(self.n_frames):
-            f = self.get(1,do_plot)
+            f,gx,gy = self.get(1,do_plot)
             self.h5['projections/SLO'][k,:,:] = f
-        
-
+            self.h5['trace/x'][k,:] = gx
+            self.h5['trace/y'][k,:] = gy
 
 if __name__=='__main__':
 

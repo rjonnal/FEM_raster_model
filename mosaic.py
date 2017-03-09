@@ -18,7 +18,11 @@ class Mosaic:
         self.use_cdf = use_cdf
         self.gain = 1.0
         self.N_neighbors = 0
-        self.N_stationary = 0
+        
+        self.shift_mean = np.inf
+        self.shift_std = np.inf
+        self.shift_max = -np.inf
+        self.shift_min = np.inf
         
         if hdf5fn is None:
 
@@ -37,13 +41,14 @@ class Mosaic:
             cones_theta = np.random.rand(N_cones)*np.pi*2
             self.cones_x = (np.cos(cones_theta)*cones_rad).astype(np.float32)
             self.cones_y = (np.sin(cones_theta)*cones_rad).astype(np.float32)
-            self.cones_I = (10.0 + np.random.randn(N_cones)*2).clip(1.0,np.inf)
-
+            self.cones_I = (10.0 + 1.0*np.random.randn(N_cones)).clip(5.0,15.0)
+            
+            
             self.N_cones = N_cones
 
             self.locality = locality
             self.granularity = granularity
-            self.theta_step = np.pi/100.0
+            self.theta_step = np.pi/10.0
             self.theta = np.arange(0,np.pi*2,self.theta_step)
             self.neighborhood = self.locality*2
 
@@ -54,6 +59,7 @@ class Mosaic:
 
             self.timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
             self.tag = self.get_tag()
+            
             self.h5 = H5('./histories/%s.hdf5'%self.tag)
             self.h5.put('/params/N_cones',self.N_cones)
             self.h5.put('/params/locality',self.locality)
@@ -180,19 +186,25 @@ class Mosaic:
         abfi = abfi[y1:y2,x1:x2]
         return np.abs(abfi)
 
-    def make_cone_profile(self,N):
+    def make_cone_profile(self,N,gaussian=True):
         x1 = self.x1
         x2 = self.x2
         y1 = self.y1
         y2 = self.y2
         xr = np.linspace(x1,x2,N)
         xr = xr - np.mean(xr)
-        
+
         yr = np.linspace(y1,y2,N)
         yr = yr - np.mean(yr)
-        
+
         xx,yy = np.meshgrid(xr,yr)
-        p = np.exp(-(xx**2+yy**2)/(2.0*self.intensity_sigma**2))
+        
+        if gaussian:
+            p = np.exp(-(xx**2+yy**2)/(2.0*self.intensity_sigma**2))
+        else:
+            p = np.zeros(xx.shape)
+            d = np.sqrt(xx**2+yy**2)
+            p[np.where(d<self.intensity_sigma)] = 1.0
         return p
         
     def get_tag(self):
@@ -216,7 +228,6 @@ class Mosaic:
 
         put('cones_x',self.cones_x)
         put('cones_y',self.cones_y)
-        put('N_stationary',self.N_stationary)
         put('N_neighbors',self.N_neighbors)
         put('gain',self.gain)
         
@@ -231,14 +242,23 @@ class Mosaic:
 
         theta = self.theta + np.random.rand()*self.theta_step
 
-        self.gain = 1.0 - self.stationary_fraction()
+        self.gain = 1.0
         
-        mag = self.granularity*self.gain
-        
-        XX = np.cos(theta)*mag
-        YY = np.sin(theta)*mag
-        XX = np.array(list(XX)+[0.0])
-        YY = np.array(list(YY)+[0.0])
+        mags = self.granularity*self.gain*np.linspace(0.01,2.0,19)
+
+        XX = []
+        YY = []
+        for mag in mags:
+
+            XXv = np.cos(theta)*mag
+            YYv = np.sin(theta)*mag
+            XXv = list(XXv)
+            YYv = list(YYv)
+            XX = XX + XXv
+            YY = YY + YYv
+
+        XX = np.array(XX)
+        YY = np.array(YY)
         
         xx = XX+x
         yy = YY+y
@@ -372,15 +392,13 @@ class Mosaic:
 
         return winner
 
-    def stationary_fraction(self):
-        return float(self.N_stationary)/float(self.N_cones)
     
     def step(self):
         self.record()
         self.save_mosaic()
         self.age = self.age + 1
         idx_vec = range(self.N_cones)
-        #shuffle(idx_vec)
+        shuffle(idx_vec)
 
         oldxs = []
         oldys = []
@@ -389,8 +407,6 @@ class Mosaic:
         contrasts = []
         neighbor_counts = []
         
-        self.N_stationary = 0.0
-
         n_expected = 0.0
         
         for idx in idx_vec:
@@ -411,16 +427,6 @@ class Mosaic:
             else:
                 winner = np.argmin(f)
     
-
-
-            if f[winner]==fmin:
-                n_expected = n_expected + 1
-
-                
-            if f[-1]==fmin:
-                self.N_stationary = self.N_stationary+1
-                winner = len(f)-1
-                
             oldxs.append(self.cones_x[idx])
             oldys.append(self.cones_y[idx])
             self.cones_x[idx] = XX[winner]
@@ -428,15 +434,28 @@ class Mosaic:
             newxs.append(self.cones_x[idx])
             newys.append(self.cones_y[idx])
 
+        
+        xoa = np.array(oldxs)
+        yoa = np.array(oldys)
+        xna = np.array(newxs)
+        yna = np.array(newys)
+
+        d = np.sqrt((xna-xoa)**2+(yna-yoa)**2)
+        self.shift_mean = d.mean()
+        self.shift_std = d.std()
+        self.shift_max = d.max()
+        self.shift_min = d.min()
+        
         self.N_neighbors = np.mean(neighbor_counts)
         
-        print 'N_stationary: %d (%d%%), N_neighbors: %0.1f'%(self.N_stationary,self.stationary_fraction()*100.,self.N_neighbors)
+        print 'Mean shift: %0.6f, N_neighbors: %0.1f'%(self.shift_mean,self.N_neighbors)
         G = 10
         if self.age%1==0:
             plt.clf()
             plt.subplot(2,2,1)
             plt.cla()
-            plt.imshow(self.mosaic,cmap='gray',interpolation='none')
+            clim = (np.min(self.mosaic),np.max(self.mosaic))
+            plt.imshow(self.mosaic,cmap='gray',interpolation='none',clim=clim)
             plt.colorbar()
             plt.subplot(2,2,2)
             plt.cla()
@@ -448,7 +467,7 @@ class Mosaic:
             plt.cla()
             sy,sx = self.mosaic.shape
             my,mx = sy//2,sx//2
-            plt.imshow(self.mosaic[my-50:my+50,mx-50:mx+50],cmap='gray',interpolation='none')
+            plt.imshow(self.mosaic[my-50:my+50,mx-50:mx+50],cmap='gray',interpolation='none',clim=clim)
             plt.colorbar()
             plt.subplot(2,2,4)
             plt.cla()
@@ -462,11 +481,11 @@ if __name__=='__main__':
     # of .01 leads to far fewer stationary cones each step; locality .02 with granularity .02/16.0
     # would be even slower; locality .01 with granularity .0025 would be quite a bit faster
     locality = .01
-    granularity = locality/8.0#.0025
+    granularity = locality/4.0#originally locality/8.0
 
     # an excellent combination of these parameters is 0.01,5.0,4500
     cone_potential_fwhm_vec = [.010]
-    central_field_strength_vec = [10.0]
+    central_field_strength_vec = [7.5]
 
     use_cdf = False
     
@@ -476,5 +495,5 @@ if __name__=='__main__':
             #m = Mosaic(x1=-.25,x2=.25,y1=-.25,y2=.25,N_cones=4500,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm,use_cdf=use_cdf)
             m = Mosaic(x1=-.5,x2=.5,y1=-.5,y2=.5,N_cones=20000,locality=locality,granularity=granularity,central_field_strength=central_field_strength,potential_fwhm_deg=cone_potential_fwhm,use_cdf=use_cdf)
 
-            while m.stationary_fraction()<.9 and m.age<200:
+            while m.shift_mean>2.5e-4 and m.age<200:
                 m.step()
