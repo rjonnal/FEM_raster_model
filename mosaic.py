@@ -102,7 +102,12 @@ class Mosaic:
             self.ymid = (self.y1+self.y2)/2.0
 
         
-        
+
+
+    def scale(self,im):
+        im = im.astype(float)
+        return (im-im.min())/(im.max()-im.min())
+    
     def save_mosaic0(self,N=512):
         x1 = self.x1
         x2 = self.x2
@@ -158,6 +163,8 @@ class Mosaic:
             else:
                 continue
         out = self.conv(out,profile)
+        out = self.scale(out)
+        
         return out
         
     def save_mosaic(self,N=512):

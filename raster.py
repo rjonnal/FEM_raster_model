@@ -108,8 +108,6 @@ class Raster:
             plt.pause(.1)
 
         dt = time.time()-t0
-
-        frame = (frame*1000).astype(np.uint16)
         return frame,gx,gy
 
     def run(self,do_plot=False):
